@@ -9,7 +9,7 @@ validate_pingcontrol_section() {
                 'enabled:bool:0' \
                 'iface:string' \
                 'check_period:uinteger' \
-                'testip:list(ipaddr)' \
+                'testip:list(host)' \
                 'sw_before_modres:uinteger' \
                 'sw_before_sysres:uinteger'
 }
@@ -23,7 +23,6 @@ pingcontrol_instance() {
         }
 
         [ "$enabled" = 0 ] && return
-
 
         procd_open_instance
         procd_set_param command "$PROG" "$1"
