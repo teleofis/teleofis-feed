@@ -26,6 +26,7 @@ case "$MODEM" in
 		uci set network.internet.device="/dev/cdc-wdm0"
 		uci set network.internet.pdptype="ipv4"
 		uci set network.internet.autoconnect="0"
+		uci set network.internet.metric='5'
 		uci add_list firewall.@zone[1].network='internet'
 		uci set system.@led[1].dev="wwan0"
 		uci set system.@led[2].dev="wwan0"
@@ -39,6 +40,7 @@ case "$MODEM" in
 		uci set network.internet="interface"
 		uci set network.internet.proto="3g"
 		uci set network.internet.device="/dev/ttyACM0"
+		uci set network.internet.metric='5'
 		uci add_list firewall.@zone[1].network='internet'
 		uci set system.@led[1].dev="3g-internet"
 		uci set system.@led[2].dev="3g-internet"
@@ -52,6 +54,7 @@ case "$MODEM" in
 		uci set network.internet="interface"
 		uci set network.internet.proto="dhcp"
 		uci set network.internet.device="mobile"
+		uci set network.internet.metric='5'
 		uci add_list firewall.@zone[1].network='internet'
 		uci set system.@led[1].dev="mobile"
 		uci set system.@led[2].dev="mobile"

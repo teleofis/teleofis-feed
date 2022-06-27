@@ -47,6 +47,7 @@ define Package/simman2/install
 	$(INSTALL_BIN) ./files/nbinfo.sh $(1)/etc/simman2/nbinfo.sh
 	$(INSTALL_BIN) ./files/setsim.sh $(1)/etc/simman2/setsim.sh
 	$(INSTALL_BIN) ./files/modeminit $(1)/etc/simman2/modeminit
+	$(INSTALL_BIN) ./files/nbmodeminit $(1)/etc/simman2/nbmodeminit
 	$(INSTALL_BIN) ./files/check_prio.sh $(1)/etc/simman2/check_prio.sh
 	$(CP) ./files/*.gcom $(1)/etc/simman2
 endef

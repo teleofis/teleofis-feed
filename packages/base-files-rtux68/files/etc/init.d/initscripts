@@ -22,6 +22,8 @@ start()
 
 	# ext modem and onboard cp2105
 	echo 133 > /sys/class/gpio/export
+	echo low > /sys/class/gpio/gpio133/direction
+	sleep 2
 	echo high > /sys/class/gpio/gpio133/direction
 
 	# usb host

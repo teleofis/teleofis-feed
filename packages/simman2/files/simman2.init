@@ -31,6 +31,7 @@ start_service_daemon(){
 
 	if [[ "$FIRSTSTART" -eq "1" ]]; then
 		/etc/simman2/modeminit $ATDEVICE &
+		/etc/simman2/nbmodeminit &
 		uci_set simman2 "$1" firststart "0"
 		uci_commit simman2
 	fi
