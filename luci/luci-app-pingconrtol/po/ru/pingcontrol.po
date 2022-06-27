@@ -22,6 +22,9 @@ msgstr "Имя конфигурации"
 msgid "Commands"
 msgstr "Команды"
 
+msgid "Successful ping"
+msgstr "Пинг успешен"
+
 msgid "Ping lost"
 msgstr "Пинг потерян"
 
