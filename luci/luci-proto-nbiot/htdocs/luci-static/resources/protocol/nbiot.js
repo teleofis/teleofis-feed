@@ -20,24 +20,6 @@ var callFileList = rpc.declare({
 
 network.registerPatternVirtual(/^nbiot-.+$/);
 
-function write_keepalive(section_id, value) {
-	var f_opt = this.map.lookupOption('_keepalive_failure', section_id),
-	    i_opt = this.map.lookupOption('_keepalive_interval', section_id),
-	    f = (f_opt != null) ? +f_opt[0].formvalue(section_id) : null,
-	    i = (i_opt != null) ? +i_opt[0].formvalue(section_id) : null;
-
-	if (f == null || f == '' || isNaN(f))
-		f = 0;
-
-	if (i == null || i == '' || isNaN(i) || i < 1)
-		i = 1;
-
-	if (f > 0)
-		uci.set('network', section_id, 'keepalive', '%d %d'.format(f, i));
-	else
-		uci.unset('network', section_id, 'keepalive');
-}
-
 return network.registerProtocol('nbiot', {
 	getI18n: function() {
 		return _('NB-IoT (SIM7020E)');
