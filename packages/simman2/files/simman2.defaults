@@ -13,7 +13,7 @@ case "$MODEL" in
 		uci set simman2.core.simdet1_gpio_pin='494'
 		uci commit simman2
 	;;
-	"TELEOFIS RTUx68v2")
+	"TELEOFIS RTUx68")
 		uci set simman2.core.pwrkey_gpio_pin='105'
 		uci set simman2.core.gsmpow_gpio_pin='83'
 		uci set simman2.core.simdet_gpio_pin='78'

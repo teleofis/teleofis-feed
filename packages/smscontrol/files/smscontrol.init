@@ -15,9 +15,9 @@ generate_pass() {
 		json_get_var MODEL model
 		case "$MODEL" in
 			"TELEOFIS LT70")
-				PASS=$(head -c 1000 /dev/urandom | tr -dc '0-9' | cut -c -15)
+				PASS=$(head -c 1000 /dev/urandom | tr -dc '0-9' | cut -c -8)
 			;;
-			"TELEOFIS RTUx68v2")
+			"TELEOFIS RTUx68")
 				PASS=$(getserialnum)
 			;;
 		esac

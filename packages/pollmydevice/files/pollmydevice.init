@@ -24,7 +24,7 @@ check_client_id()
 			"TELEOFIS LT70")
 				CLIENT_ID=$(head -c 1000 /dev/urandom | tr -dc '0-9' | cut -c -15)
 			;;
-			"TELEOFIS RTUx68v2")
+			"TELEOFIS RTUx68")
 				SERIALNUM=$((0x$(getserialnum)))
 				CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
 			;;
