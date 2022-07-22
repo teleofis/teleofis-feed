@@ -1,13 +1,60 @@
-echo $DEVPATH | grep -q "/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.3/1-1.3:1.0" || exit 0
 if [ "$PRODUCT" == "10c4/ea70/100" ]; then
+	COM2=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.3/1-1.3:1.0
+	COM10=/devices/soc0/80080000.ahb/80080000.usb/ci_hdrc.0/usb2/2-1/2-1.1/2-1.1.1/2-1.1.1:1.0
+	COM11=/devices/soc0/80080000.ahb/80080000.usb/ci_hdrc.0/usb2/2-1/2-1.1/2-1.1.1/2-1.1.1:1.1
+	COM12=/devices/soc0/80080000.ahb/80080000.usb/ci_hdrc.0/usb2/2-1/2-1.1/2-1.1.3/2-1.1.3:1.0
+	COM13=/devices/soc0/80080000.ahb/80080000.usb/ci_hdrc.0/usb2/2-1/2-1.1/2-1.1.3/2-1.1.3:1.1
+	COM14=/devices/soc0/80080000.ahb/80080000.usb/ci_hdrc.0/usb2/2-1/2-1.1/2-1.1.4/2-1.1.4:1.0
+	COM10N=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.4/1-1.4.1/1-1.4.1.1/1-1.4.1.1:1.0
+	COM11N=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.4/1-1.4.1/1-1.4.1.1/1-1.4.1.1:1.1
+	COM12N=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.4/1-1.4.1/1-1.4.1.3/1-1.4.1.3:1.0
+	COM13N=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.4/1-1.4.1/1-1.4.1.3/1-1.4.1.3:1.1
+	COM14N=/devices/soc0/80080000.ahb/80090000.usb/ci_hdrc.1/usb1/1-1/1-1.4/1-1.4.1/1-1.4.1.4/1-1.4.1.4:1.0
 	case "$ACTION" in
 		add)
-			ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com2
-			exit 0
+			case "$DEVPATH" in
+				"$COM2")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com2
+				;;
+				"$COM10" | "$COM10N")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com10
+				;;
+				"$COM11" | "$COM11N")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com11
+				;;
+				"$COM12" | "$COM12N")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com12
+				;;
+				"$COM13" | "$COM13N")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com13
+				;;
+				"$COM14" | "$COM14N")
+					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com14
+					/etc/init.d/pollmydevice restart
+				;;
+			esac
 		;;
 		remove)
-			rm /dev/com2
-			exit 0
+			case "$DEVPATH" in
+				"$COM2")
+					rm /dev/com2
+				;;
+				"$COM10" | "$COM10N")
+					rm /dev/com10
+				;;
+				"$COM11" | "$COM11N")
+					rm /dev/com11
+				;;
+				"$COM12" | "$COM12N")
+					rm /dev/com12
+				;;
+				"$COM13" | "$COM13N")
+					rm /dev/com13
+				;;
+				"$COM14" | "$COM14N")
+					rm /dev/com14
+				;;
+			esac
 		;;
 	esac
 fi

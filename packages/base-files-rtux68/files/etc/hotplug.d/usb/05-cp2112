@@ -1,0 +1,29 @@
+if [ "$PRODUCT" == "10c4/ea90/0" -a "$ACTION" == "add" ]; then
+	FULLDEVPATH=$(ls /sys$DEVPATH/*:*/i2c*/new_device)
+	if [ -n "$FULLDEVPATH" ]; then
+		#echo pcf8563 0x51 > $FULLDEVPATH
+		echo ds2482 0x18 > $FULLDEVPATH
+		echo 0 > /sys/bus/w1/devices/w1_bus_master1/w1_master_pullup
+		GPIO_BASE=$(cat /sys$DEVPATH/*:*/gpio/*/base)
+		GPIO=$((GPIO_BASE+7))
+		echo $GPIO > /sys/class/gpio/export
+		VALUE=$(cat /sys/class/gpio/$GPIO/value)
+		if [ "$VALUE" == "1" ]; then
+			echo 2 > /tmp/sysinfo/exp
+			# power on USB port
+			GPIO=$((GPIO_BASE+4))
+			echo $GPIO > /sys/class/gpio/export
+			echo high > /sys/class/gpio/$GPIO/direction
+			GPIO=$((GPIO_BASE+3))
+			echo $GPIO > /sys/class/gpio/export
+			echo low > /sys/class/gpio/$GPIO/direction
+			echo high > /sys/class/gpio/$GPIO/direction
+		else
+			echo 1 > /tmp/sysinfo/exp
+		fi
+		if [ -e /etc/pollmydevice/exp_board ]; then
+			/etc/pollmydevice/exp_board
+			rm /etc/pollmydevice/exp_board
+		fi
+	fi
+fi
