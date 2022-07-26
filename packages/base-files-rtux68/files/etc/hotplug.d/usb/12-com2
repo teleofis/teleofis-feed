@@ -30,6 +30,7 @@ if [ "$PRODUCT" == "10c4/ea70/100" ]; then
 				;;
 				"$COM14" | "$COM14N")
 					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com14
+					rm /tmp/exp_ports_wdt
 					/etc/init.d/pollmydevice restart
 				;;
 			esac
@@ -53,6 +54,8 @@ if [ "$PRODUCT" == "10c4/ea70/100" ]; then
 				;;
 				"$COM14" | "$COM14N")
 					rm /dev/com14
+					touch /tmp/exp_ports_wdt
+					/sbin/exp_ports_wdt &
 				;;
 			esac
 		;;
