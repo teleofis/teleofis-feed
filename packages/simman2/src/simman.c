@@ -84,6 +84,7 @@ int SetSim(struct settings_entry *settings, struct modems_ops *modem, uint8_t si
 			changeCounter = 0;
 			changeCounterForReboot--;
 			first_start = 1;
+			return 0;
 		}
 
 	}
