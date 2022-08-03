@@ -6,6 +6,7 @@ STOP=84
 
 start()
 {
+	echo 25000000 > /sys/kernel/debug/mmc0/clock
 	# modem init
 	echo 495 > /sys/class/gpio/export
 	echo high > /sys/class/gpio/gpio495/direction

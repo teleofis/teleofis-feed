@@ -2,13 +2,12 @@
 
 START=50
 
-load_iolines_boot() {	
+load_iolines_boot() {
 
 	config_get dev "$1" "dev"
-	
+
 	adc=$(echo ${dev:3:1})
-	adc=$((adc-1))
-	
+
 	config_get mode "$1" "mode"
 	config_get enabled "$1" "enabled" "0"
 	if [ $enabled -eq 1 ]; then
@@ -25,22 +24,21 @@ load_iolines_boot() {
 				adc_set $adc pu 1
 				adc_set $adc pd 1
 				;;
-		esac		
+		esac
 	else
 		echo in > $pu/direction
 		echo low > $pd/direction
 	fi
 }
 
-load_iolines() {	
+load_iolines() {
 
 	config_get dev "$1" "dev"
-	
+
 	adc=$(echo ${dev:3:1})
-	adc=$((adc-1))
-	
+
 	config_get mode "$1" "mode"
-		
+
 	case "$mode" in
 		"mode1")
 			adc_set $adc pu 1
@@ -54,7 +52,7 @@ load_iolines() {
 			adc_set $adc pu 1
 			adc_set $adc pd 1
 			;;
-	esac		
+	esac
 
 }
 
