@@ -39,6 +39,7 @@ define Package/pollmydevice/install
 	$(INSTALL_DIR) $(1)/etc/pollmydevice
 	$(INSTALL_BIN) ./files/console $(1)/etc/pollmydevice/console
 	$(INSTALL_BIN) ./files/exp_board $(1)/etc/pollmydevice/exp_board
+	$(INSTALL_BIN) ./files/exp_port $(1)/etc/pollmydevice/exp_port
 	$(INSTALL_DIR) $(1)/etc/sysctl.d
 	$(CP) ./files/printk.sysctl $(1)/etc/sysctl.d/12-printk.conf
 	$(INSTALL_DIR) $(1)/usr/libexec/rpcd/

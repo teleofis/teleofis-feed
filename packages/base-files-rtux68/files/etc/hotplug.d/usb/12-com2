@@ -15,6 +15,10 @@ if [ "$PRODUCT" == "10c4/ea70/100" ]; then
 			case "$DEVPATH" in
 				"$COM2")
 					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com2
+					if [ -e /etc/pollmydevice/exp_port ]; then
+						/etc/pollmydevice/exp_port
+						rm /etc/pollmydevice/exp_port
+					fi
 				;;
 				"$COM10" | "$COM10N")
 					ln -s /dev/$(ls /sys/$DEVPATH | grep tty) /dev/com10

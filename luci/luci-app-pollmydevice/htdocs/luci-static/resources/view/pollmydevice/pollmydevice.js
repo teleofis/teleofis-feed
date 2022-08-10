@@ -43,7 +43,7 @@ return view.extend({
 		s.nodescriptions = true;
 		s.addbtntitle = _('Add new configuration...');
 		s.handleAdd = function(ev,name) {
-			for (var i = 0; i < 7; i++) {
+			for (var i = 0; i < 8; i++) {
 				var section = uci.get('pollmydevice', String(i));
 				if (section == null) {
 					var section_id = String(i);

@@ -46,7 +46,7 @@
 #define MAX_CLIENTS_IN_QUEUE    64
 
 #define MAX_EPOLL_EVENTS        MAX_CLIENTS_IN_QUEUE + 4  // + timer + listen socket + com-port
-#define NUM_OF_DEVICES          7  // num of services (e.g. RS232, RS485 means 2)
+#define NUM_OF_DEVICES          8  // num of services (e.g. RS232, RS485 means 2)
 
 #define MAX_TCP_BUF_SIZE        1024
 #define MAX_SERIAL_BUF_SIZE     4096
