@@ -5,16 +5,18 @@ SIM7100="1e0e/9001/232"
 SIM7600="1e0e/9001/318"
 [ "$PRODUCT" = "$SIM7100" -o "$PRODUCT" = "$SIM7600" ] || exit 0
 
+[ "$(readlink /dev/gps0)" == "/dev/ttyAPP1" ] && exit 0
+
 case "$ACTION" in
 	add)
 		DEVICE_NAME="/dev/$(ls /sys/$DEVPATH | grep tty)"
-		ln -s $DEVICE_NAME /dev/gps1
-		#ATPORT=$(uci get simman.info.atdevice)
-		#sleep 20 && gcom -d $ATPORT -s /etc/simman/gpson.gcom && /etc/init.d/gpsd restart && /etc/init.d/ntpd restart &
+		ln -s $DEVICE_NAME /dev/gps0
+		sleep 30 && echo -e "AT+CGPS=1\r" > /dev/ttyGSM1 &
+		/etc/init.d/gpsd restart
 		exit 0
 	;;
 	remove)
-		rm /dev/gps1
+		rm /dev/gps0
 		exit 0
 	;;
 esac

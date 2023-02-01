@@ -37,7 +37,11 @@ start()
 	echo low > /sys/class/gpio/gpio121/direction
 	echo high > /sys/class/gpio/gpio121/direction
 
-	ln -s /dev/ttyAPP1 /dev/gps0
+	RESULT=$(gcom -d /dev/ttyAPP1 -s /etc/simman2/gpsdata.gcom)
+	if [ "$RESULT" != "ERROR" ]; then
+		ln -s /dev/ttyAPP1 /dev/gps0
+	fi
+
 	ln -s /dev/ttyAPP4 /dev/com0
 	ln -s /dev/ttyAPP2 /dev/com1
 
