@@ -6,12 +6,19 @@ STOP=84
 
 start()
 {
+	RESET_FLAG=$(fw_printenv -n factory_reset)
+	if [[ "$RESET_FLAG" = "yes" ]]; then
+		firstboot -y
+		sync
+		fw_setenv factory_reset
+		reboot
+	fi
 	echo 25000000 > /sys/kernel/debug/mmc0/clock
 	# modem init
 	echo 495 > /sys/class/gpio/export
 	echo high > /sys/class/gpio/gpio495/direction
 	echo 480 > /sys/class/gpio/export
-	echo low > /sys/class/gpio/gpio480/direction
+	echo high > /sys/class/gpio/gpio480/direction
 	echo 493 > /sys/class/gpio/export
 	echo in > /sys/class/gpio/gpio493/direction
 	echo 494 > /sys/class/gpio/export
