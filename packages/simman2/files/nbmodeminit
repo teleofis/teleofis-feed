@@ -4,7 +4,7 @@
 json_load "$(ubus call system board)"
 json_get_var MODEL model
 case "$MODEL" in
-	"TELEOFIS RTUx68")
+	"TELEOFIS RTUx68" | "TELEOFIS RTUx68 RE-DE")
 		ATDEVICE=/dev/ttyAMA0
 
 		while [[ ! -e $ATDEVICE ]]; do

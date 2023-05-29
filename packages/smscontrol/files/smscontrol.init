@@ -17,7 +17,7 @@ generate_pass() {
 			"TELEOFIS LT70")
 				PASS=$(head -c 1000 /dev/urandom | tr -dc '0-9' | cut -c -8)
 			;;
-			"TELEOFIS RTUx68")
+			"TELEOFIS RTUx68" | "TELEOFIS RTUx68 RE-DE")
 				PASS=$(getserialnum)
 			;;
 		esac

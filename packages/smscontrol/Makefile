@@ -13,6 +13,7 @@ define Package/smscontrol
   CATEGORY:=Utilities
   TITLE:=CLI commands over sms and calls
   DEPENDS:=smstools3
+  PKGARCH:=all
 endef
 
 define Package/smscontrol/description

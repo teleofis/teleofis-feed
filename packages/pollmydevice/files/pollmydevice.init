@@ -28,6 +28,14 @@ check_client_id()
 				SERIALNUM=$((0x$(getserialnum)))
 				CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
 			;;
+			"TELEOFIS RTUx68 RE-DE")
+				SERIALNUM=$((0x$(getserialnum)))
+				CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
+				if [ -e /etc/pollmydevice/exp_port ]; then
+					/etc/pollmydevice/exp_port
+					rm /etc/pollmydevice/exp_port
+				fi
+			;;
 		esac
 		uci_set pollmydevice "$INTERFACE" client_id "$CLIENT_ID"
 		uci_commit pollmydevice
