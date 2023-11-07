@@ -33,8 +33,6 @@ define Package/iolines-lt70/install
 	$(CP) ./files/iolines.config $(1)/etc/config/iolines
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/iolines.init $(1)/etc/init.d/iolines
-	$(INSTALL_DIR) $(1)/sbin
-	$(INSTALL_BIN) ./files/adc_set $(1)/sbin/adc_set
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_BIN) ./files/iolines.defaults $(1)/etc/uci-defaults/20_iolines
 endef

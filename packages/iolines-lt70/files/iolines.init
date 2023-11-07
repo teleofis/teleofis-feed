@@ -2,6 +2,8 @@
 
 START=50
 
+GPIO_BASE="393"
+
 load_iolines_boot() {
 
 	config_get dev "$1" "dev"
@@ -13,21 +15,21 @@ load_iolines_boot() {
 	if [ $enabled -eq 1 ]; then
 		case "$mode" in
 			"mode1")
-				adc_set $adc pu 1
-				adc_set $adc pd 0
+				echo low > /dev/pu$adc/direction
+				echo low > /dev/pd$adc/direction
 				;;
 			"mode2")
-				adc_set $adc pu 0
-				adc_set $adc pd 0
+				echo high > /dev/pu$adc/direction
+				echo low > /dev/pd$adc/direction
 				;;
 			"mode3")
-				adc_set $adc pu 1
-				adc_set $adc pd 1
+				echo low > /dev/pu$adc/direction
+				echo high > /dev/pd$adc/direction
 				;;
 		esac
 	else
-		echo in > $pu/direction
-		echo low > $pd/direction
+		echo low > /dev/pu$adc/direction
+		echo low > /dev/pd$adc/direction
 	fi
 }
 
@@ -41,22 +43,35 @@ load_iolines() {
 
 	case "$mode" in
 		"mode1")
-			adc_set $adc pu 1
-			adc_set $adc pd 0
+			echo low > /dev/pu$adc/direction
+			echo low > /dev/pd$adc/direction
 			;;
 		"mode2")
-			adc_set $adc pu 0
-			adc_set $adc pd 0
+			echo high > /dev/pu$adc/direction
+			echo low > /dev/pd$adc/direction
 			;;
 		"mode3")
-			adc_set $adc pu 1
-			adc_set $adc pd 1
+			echo low > /dev/pu$adc/direction
+			echo high > /dev/pd$adc/direction
 			;;
 	esac
 
 }
 
 boot() {
+	gpio=$GPIO_BASE
+	count="0"
+	while [ "$gpio" -le "$((GPIO_BASE + 17))" ]
+	do
+		echo $gpio > /sys/class/gpio/export
+		if [ "$count" -le "8" ]; then
+			ln -s /sys/class/gpio/gpio$gpio /dev/pu$count 
+		else
+			ln -s /sys/class/gpio/gpio$gpio /dev/pd$((count-9))
+		fi
+		gpio=$((gpio + 1))
+		count=$((count + 1))
+	done
 	config_load iolines
 	config_foreach load_iolines_boot io
 }

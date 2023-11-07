@@ -1,0 +1,20 @@
+#!/bin/sh
+
+case "$1" in
+	list)
+		echo '{ "info": { } }'
+	;;
+	call)
+		case "$2" in
+			info)
+				temp=$(cat /sys/bus/iio/devices/iio:device0/in_voltage9_raw)
+				temp="$temp °C"
+				svfw=$(cat /sys/bus/iio/devices/iio:device0/in_voltage10_raw)
+				echo '{'
+				echo "\"temperature\": \"$temp\" ,"
+				echo "\"svfw\": \"$svfw\""
+				echo '}'
+			;;
+		esac
+	;;
+esac
