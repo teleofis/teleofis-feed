@@ -112,7 +112,7 @@ start() {
 	enabled=$(uci get smscontrol.common.enabled)
 	[ -e "/etc/config/smscontrol_log" ] || touch /etc/config/smscontrol_log
 	if [ "$enabled" -eq "1" ]; then
-		mkdir "$DIR"
+		mkdir -p "$DIR"
 		touch "$COMMANDS"
 		chmod +x "$COMMANDS"
 		touch "$CALLS"

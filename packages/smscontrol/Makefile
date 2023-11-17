@@ -12,7 +12,7 @@ define Package/smscontrol
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=CLI commands over sms and calls
-  DEPENDS:=smstools3
+  DEPENDS:=smstools3-fix
   PKGARCH:=all
 endef
 
