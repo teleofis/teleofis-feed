@@ -52,7 +52,7 @@ int GetAllInfo(struct settings_entry *settings)
 		fprintf(stdout, "}\n");
 	} else
 	{
-		LOG("modem does not respond to AT-commands\n");
+		LOG("modem does not respond to AT-commands or unknown modem\n");
 	}
 	return 0;
 }
