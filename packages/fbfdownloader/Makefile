@@ -12,6 +12,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/fbfdownloader
   SECTION:=utils
   CATEGORY:=Utilities
+  DEPENDS+= +libpthread
   TITLE:=Firmware flash tool for ASR based modems
 endef
 
