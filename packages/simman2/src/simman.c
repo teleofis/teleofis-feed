@@ -236,7 +236,7 @@ int main(int argc, char **argv)
 			}
 			sim2_status = tmp;
 
-			if (first_start && state == GET_IMEI)
+			if (first_start && (state == GET_IMEI || state == GET_CCID ))
 			{
 				if (settings.sim[0].prio < settings.sim[1].prio)
 				{
@@ -306,6 +306,7 @@ int main(int argc, char **argv)
 							LOG("No one SIM is available\n");
 					}
 				}
+				active_sim = gpio_read(settings.simaddr_pin);
 				first_start = 0;
 			}
 			first_start = hot_change;
@@ -366,7 +367,7 @@ int main(int argc, char **argv)
 
 								prev_time = now_time;
 
-								if (strstr(settings.ccid,"NONE") != NULL || strstr(settings.ccid,"ERROR") != NULL)
+								if (strstr(settings.ccid,"NONE") != NULL || strstr(settings.ccid,"ERR") != NULL)
 								{
 									if (++retry >= 2 )
 										state = IDLE;
