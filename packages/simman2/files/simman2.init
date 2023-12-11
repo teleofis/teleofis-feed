@@ -48,6 +48,7 @@ start_service_daemon(){
 }
 
 start_service(){
+	mkdir -p /var/simman2/dev
 	config_load 'simman2'
 	config_foreach start_service_daemon 'simman2'
 }

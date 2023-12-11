@@ -258,7 +258,7 @@ char * wait_for(int fd, char *text, char *receive) {
 	while(now<=timeout) {
 		time(&now);
 		c=get_one_byte(fd);
-		if(c!= -1) {
+		if(c!= -1 || b>=255) {
 				//fixme: size of receive > b
 				receive[b++]=c;
 				if(strstr(receive,text)!=NULL) break;
@@ -329,7 +329,21 @@ int cut_string(char *stringSource, char *stringStart, char *stringEnd){
 	return 0;
 }
 
-int modem_send_command(char *receive, char *device ,char *at_command, char *wait_output){
+int modem_send_command(char *receive, char *device, char *at_command, char *wait_output){
+	char fname[256];
+	strcpy(fname,"/var/simman2");
+	strcat(fname,device);
+	strcat(fname,".lock");
+	if(access(fname,F_OK)==0){
+		// fixme
+		sleep(1);
+		remove(fname);
+	}
+
+	int open_file=fopen(fname,"a");
+	if(open_file){
+		fclose(open_file);
+	}
 	int fd=open(device,O_RDWR|O_NOCTTY|O_SYNC);
 	if(set_interface(fd,115200)!=0){
 		close(fd);
@@ -341,6 +355,8 @@ int modem_send_command(char *receive, char *device ,char *at_command, char *wait
 	}
 	wait_for(fd,wait_output,receive);
 	close(fd);
+	remove(fname);
+
 	return 0;
 }
 
@@ -887,7 +903,6 @@ int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_
 	uint8_t sim0_stat, sim1_stat, active_sim, res=0;
 	char buf[256]={0};
 	char buf2[256]={0};
-	char cmd[256]={0};
 
 	printf("attempt to switch to SIM%d\n", sim_n+1);
 	res=gpio_set_direction(settings->simdet0_pin,0);
