@@ -17,6 +17,11 @@ xappend() {
 	echo "${value#--}" >> "$filename"
 }
 
+modem_power_off() {
+	echo "simman2: power off $1 modem" > /dev/kmsg
+	simman2_cli -x $1
+}
+
 section_enabled(){
 	config_get_bool enabled "$1" 'enabled' 0
 	[ $enabled -gt 0 ]
@@ -55,4 +60,10 @@ service_triggers()
 reload_service() {
 	stop
 	start
+}
+
+shutdown() {
+  stop
+  config_load 'simman2'
+  config_foreach modem_power_off 'simman2'
 }
