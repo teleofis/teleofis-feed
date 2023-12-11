@@ -19,6 +19,8 @@
 #define	INFO_IMSI		12
 #define	INFO_FW 		13
 #define	INFO_ALL 		14
+#define	POWER_OFF 		15
+#define	POWER_UP 		16
 
 #define IN		0
 #define OUT		1
