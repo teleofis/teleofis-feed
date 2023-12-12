@@ -191,6 +191,7 @@ int modem_common_power_up(struct settings_entry *settings, struct modems_ops *mo
 
 int modem_common_power_reset(struct settings_entry *settings, struct modems_ops *modem){
 	ubus_interface_down(settings->iface);
+	services_stop(settings->restart_services);
 	sleep(1);
 	if(modem_common_power_down(settings,modem)!=0){
 		return -1;

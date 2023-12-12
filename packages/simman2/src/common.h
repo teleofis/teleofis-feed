@@ -77,6 +77,7 @@ struct settings_entry{
 	int16_t simaddr_pin;
 	int16_t simdet0_pin;
 	int16_t simdet1_pin;
+	uint8_t *restart_services;
 };
 
 struct modems_ops{
@@ -131,6 +132,7 @@ int modem_common_set_auth(struct settings_entry *settings, char *user, char *pas
 int modem_send_command(char *receive, char *device, char *at_command, char *wait_output);
 int common_awk_f(char *source_str, char *delim, uint8_t num);
 int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_t sim_n, uint8_t first_start);
+int services_stop(uint8_t *services);
 int gpio_read(int16_t gpio);
 int gpio_set_value(int16_t gpio, uint8_t value);
 char *uci_get_value(char *uci_path);

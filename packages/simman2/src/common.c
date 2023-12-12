@@ -724,6 +724,12 @@ int uci_read_configuration(struct settings_entry *set, char *config)
 	}
 	set->atdevice = p;
 
+	sprintf(path,"simman2.%s.restart_services",config);
+	if ((p = uci_get_value(path)) != NULL)
+		set->restart_services=p;
+	else
+		set->restart_services=NULL;
+
 //	fprintf(stderr,"retry_num=%d, check_period=%d, delay=%d, atdevice=%s, gsmpow_pin=%d, simdet_pin=%d, simaddr_pin=%d, simdet0_pin=%d, simdet1_pin=%d, ",
 //		set->retry_num,
 //		set->check_period,
@@ -875,15 +881,35 @@ int ubus_network_reload(void){
 	return 0;
 }
 
-int services_stop(uint8_t *iface){
-	//fixme
-	printf("Services %s stop\n",iface);
+int services_stop(uint8_t *services){
+	char service_stop_cmd[256];
+	char services_copy[256];
+	if(services!=NULL){
+		strcpy(services_copy,services);
+		char *tok = strtok(services_copy," ");
+		while(tok)
+		{
+			sprintf(service_stop_cmd,"/etc/init.d/%s stop",tok);
+			system(service_stop_cmd);
+			tok	= strtok(NULL," ");
+		}
+	}
 	return 0;
 }
 
-int services_start(uint8_t *iface){
-	//fixme
-	printf("Services %s start\n",iface);
+int services_start(uint8_t *services){
+	char service_start_cmd[256];
+	char services_copy[256];
+	if(services!=NULL){
+		strcpy(services_copy,services);
+		char *tok = strtok(services_copy," ");
+		while(tok)
+		{
+			sprintf(service_start_cmd,"/etc/init.d/%s start",tok);
+			system(service_start_cmd);
+			tok	= strtok(NULL," ");
+		}
+	}
 	return 0;
 }
 
@@ -983,8 +1009,7 @@ int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_
 
 	system("uci commit network");
 
-	//fixme
-	services_stop(settings->iface);
+	services_stop(settings->restart_services);
 	//fixme
 	modem->sim_pullout(settings);
 
@@ -1009,7 +1034,7 @@ int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_
 	
 	//fixme	
 	modem->sim_pullup(settings);
-	services_start(settings->iface);
+	services_start(settings->restart_services);
 	ubus_network_reload();
 	ubus_interface_up(settings->iface);
 	return 0;
