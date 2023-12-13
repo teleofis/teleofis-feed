@@ -340,8 +340,9 @@ int modem_send_command(char *receive, char *device, char *at_command, char *wait
 		remove(fname);
 	}
 
-	int open_file=fopen(fname,"a");
-	if(open_file){
+	FILE *open_file=fopen(fname,"w");
+	if(open_file!=NULL){
+		fprintf(open_file,"ALL:");
 		fclose(open_file);
 	}
 	int fd=open(device,O_RDWR|O_NOCTTY|O_SYNC);

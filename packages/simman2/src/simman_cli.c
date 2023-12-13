@@ -33,7 +33,6 @@ int GetAllInfo(struct settings_entry *settings)
 	struct modems_ops *modem = NULL;
 	modem = modems_backend(settings->atdevice);
 	if(modem!=NULL){
-		modem->init(settings);
 		fprintf(stdout, "{\n");
 		fprintf(stdout, "  \"modem\": \"%s\",\n", modem_summary(modem,INFO_MODEM, settings->atdevice));
 		fprintf(stdout, "  \"firmware\": \"%s\",\n", modem_summary(modem,INFO_FW, settings->atdevice));
@@ -223,7 +222,7 @@ int main(int argc, char **argv)
 			if(ModemStarted(settings.atdevice) < 0) {
 				if(cmd==POWER_UP) {
 					LOG("modem power up\n");
-					modem_common_power_reset(&settings,NULL);
+					modem_common_power_up(&settings,NULL);
 					return 0;
 				}
 				if(cmd==POWER_OFF) {

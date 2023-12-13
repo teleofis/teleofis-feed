@@ -248,9 +248,31 @@ int a7600_imei(char *receive, char *device){
 		strcpy(receive,"ERROR");
 		return -1;
 	}
-	if(cut_string(receive, "AT+CGSN\r\r\n", "\r")!=0){
+	while(receive[0] && !isdigit(receive[0])){
+		strcpy(receive, receive +1);
+	}
+	if(cut_string(receive, "", "\r")!=0){
 		strcpy(receive,"ERROR");
 		return -1;
+	}
+	return 0;
+}
+
+int a7600_imsi(char *receive, char *device){
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(receive,device,"\rAT+CIMI\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+	while(receive[0] && !isdigit(receive[0])){
+		strcpy(receive, receive +1);
+	}
+	if(cut_string(receive, "", "\r\n")!=0){
+		strcpy(receive,"ERROR");
 	}
 	return 0;
 }
@@ -406,7 +428,7 @@ struct modems_ops a7600_ops = {
 		.version			= a7600_version,
 		.imei				= a7600_imei,
 		.ccid				= a7600_ccid,
-		.imsi				= modem_common_imsi,
+		.imsi				= a7600_imsi,
 		.pin_state			= modem_common_pin_state,
 		.csq				= modem_common_csq,
 		.bs_info			= a7600_bs_info,

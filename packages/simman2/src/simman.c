@@ -109,6 +109,15 @@ int SetSim(struct settings_entry *settings, struct modems_ops *modem, uint8_t si
 	return 0;
 }
 
+int chartoint(char *s)
+{
+    int i, n=0;
+    for(i=0; isdigit(s[i]); ++i){
+        n=10*n+(s[i]-'0');
+    }
+    return n;
+}
+
 int main(int argc, char **argv)
 {
 	struct settings_entry settings;
@@ -308,6 +317,7 @@ int main(int argc, char **argv)
 				}
 				active_sim = gpio_read(settings.simaddr_pin);
 				first_start = 0;
+				hot_change = 0;
 			}
 			first_start = hot_change;
 			hot_change = 0;
@@ -391,10 +401,10 @@ int main(int argc, char **argv)
 								break;
 
 							if (settings.csq_level != 0){
-								sig_level = modem_summary(modem,INFO_SIGLEV, settings.atdevice);
+								sig_level = chartoint(modem_summary(modem,INFO_SIGLEV, settings.atdevice));
 								if (sig_level == 99) {
 									sleep(1);
-									sig_level = modem_summary(modem,INFO_SIGLEV, settings.atdevice);
+									sig_level = chartoint(modem_summary(modem,INFO_SIGLEV, settings.atdevice));
 								}
 								LOG("Current ASU: %d\n", sig_level);
 								if (sig_level < settings.csq_level || sig_level == 99)
