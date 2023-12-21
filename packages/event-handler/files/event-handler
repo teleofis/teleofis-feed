@@ -1,0 +1,41 @@
+#!/bin/sh
+POE="$(uci -q get event-handler.@event-handler[0].poe_gpio)"
+USB="$(uci -q get event-handler.@event-handler[0].usb_gpio)"
+HEAT="$(uci -q get event-handler.@event-handler[0].heat_gpio)"
+LOG=/etc/event_log
+
+DATE=$(date)
+INTS_MASK=$(getinfo adc12)
+
+if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
+	VALUE=$(cat /sys/class/gpio/gpio$POE/value)
+	if [[ "$VALUE" == "1" ]]; then
+		echo "$DATE: poe: error" >> $LOG
+	else
+		echo "$DATE: poe: error clear" >> $LOG
+	fi
+fi
+
+if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
+	VALUE=$(cat /sys/class/gpio/gpio$USB/value)
+	if [[ "$VALUE" == "1" ]]; then
+		echo "$DATE: usb: error" >> $LOG
+	else
+		echo "$DATE: usb: error clear" >> $LOG
+	fi
+fi
+
+if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
+	VALUE=$(cat /sys/class/gpio/gpio$HEAT/value)
+	if [[ "$VALUE" == "1" ]]; then
+		echo "$DATE: heat: started" >> $LOG
+	else
+		echo "$DATE: heat: ended" >> $LOG
+	fi
+fi
+
+if [[ $((wc -l $LOG)) -ge "100" ]]; then
+	mv $LOG $LOG.old
+fi
+
+exit 0

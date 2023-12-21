@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+
+START=11
+
+start() {
+	poe_gpio="$(uci -q get event-handler.@event-handler[0].poe_gpio)"
+	echo $poe_gpio > /sys/class/gpio/export
+	usb_gpio="$(uci -q get event-handler.@event-handler[0].usb_gpio)"
+	echo $usb_gpio > /sys/class/gpio/export
+	heat_gpio="$(uci -q get event-handler.@event-handler[0].heat_gpio)"
+	echo $heat_gpio > /sys/class/gpio/export
+}

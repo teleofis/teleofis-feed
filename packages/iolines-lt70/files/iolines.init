@@ -2,7 +2,7 @@
 
 START=50
 
-GPIO_BASE="393"
+GPIO_BASE="384"
 
 load_iolines_boot() {
 
