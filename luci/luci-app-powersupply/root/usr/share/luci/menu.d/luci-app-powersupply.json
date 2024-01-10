@@ -1,0 +1,13 @@
+{
+        "admin/services/powersupply": {
+                "title": "PowerSupply",
+                "action": {
+                        "type": "view",
+                        "path": "powersupply/powersupply"
+                },
+                "depends": {
+                        "acl": [ "luci-app-powersupply" ],
+                        "uci": { "powersupply": true }
+                }
+        }
+}

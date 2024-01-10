@@ -1,0 +1,42 @@
+#!/bin/sh /etc/rc.common
+
+START=11
+
+start() {
+	poe_out_power_enabled="$(uci -q get powersupply.system.poe_out_power)"
+	poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
+	echo $poe_out_power_enabled > /sys/class/gpio/gpio$poe_out_power_gpio/value
+	
+	ext_power_enabled="$(uci -q get powersupply.system.ext_power)"
+	ext_power_gpio="$(uci -q get powersupply.system.ext_power_gpio)"
+	echo $ext_power_enabled > /sys/class/gpio/gpio$ext_power_gpio/value
+
+	usb_power_enabled="$(uci -q get powersupply.system.usb_power)"
+	usb_power_gpio="$(uci -q get powersupply.system.usb_power_gpio)"
+	echo $usb_power_enabled > /sys/class/gpio/gpio$usb_power_gpio/value
+}
+
+stop() {
+	poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
+	echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
+	
+	ext_power_gpio="$(uci -q get powersupply.system.ext_power_gpio)"
+	echo 0 > /sys/class/gpio/gpio$ext_power_gpio/value
+
+	usb_power_gpio="$(uci -q get powersupply.system.usb_power_gpio)"
+	echo 0 > /sys/class/gpio/gpio$usb_power_gpio/value
+}
+
+boot() {
+	poe_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
+	echo $poe_gpio > /sys/class/gpio/export
+	usb_gpio="$(uci -q get powersupply.system.usb_power_gpio)"
+	echo $usb_gpio > /sys/class/gpio/export
+	ext_gpio="$(uci -q get powersupply.system.ext_power_gpio)"
+	echo $ext_gpio > /sys/class/gpio/export
+}
+
+restart() {
+	stop
+	start
+}

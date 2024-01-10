@@ -3,6 +3,7 @@
 START=11
 
 start() {
+	touch /etc/event_log
 	poe_gpio="$(uci -q get event-handler.@event-handler[0].poe_gpio)"
 	echo $poe_gpio > /sys/class/gpio/export
 	usb_gpio="$(uci -q get event-handler.@event-handler[0].usb_gpio)"
