@@ -1,0 +1,29 @@
+diff --git a/arch/mips/dts/teleofis_lt70.dts b/arch/mips/dts/teleofis_lt70.dts
+index 7254b80..3f5f7d7 100644
+--- a/arch/mips/dts/teleofis_lt70.dts
++++ b/arch/mips/dts/teleofis_lt70.dts
+@@ -10,11 +10,12 @@
+ 
+ 	aliases {
+ 		serial0 = &uart0;
++		serial1 = &uart1;
+ 		spi0 = &spi;
+ 	};
+ 
+ 	chosen {
+-		stdout-path = &uart0;
++		stdout-path = &uart1;
+ 	};
+ 
+ 	leds {
+@@ -66,6 +67,10 @@
+ 	status = "okay";
+ };
+ 
++&uart1 {
++	status = "okay";
++};
++
+ &gpio1 {
+ 	status = "okay";
+ };
