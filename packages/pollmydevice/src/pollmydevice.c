@@ -19,6 +19,8 @@
 #include <pthread.h>
 #include <termios.h>
 #include <inttypes.h>
+#include <linux/serial.h>
+#include <sys/ioctl.h>
 
 #include "uci.h"
 #include "log.h"
@@ -70,6 +72,8 @@
 
 #define MB_ASCII_ON				1
 
+#define RS485_ON				1
+
 typedef struct 
 {
     int mode;
@@ -91,6 +95,7 @@ typedef struct
     int quiet;
     int timeout_pack;
     int size_pack;
+    int rs485_mode;
 } device_config_t;
 
 
@@ -380,6 +385,22 @@ void *ServerThreadFunc(void *args)
         pthread_exit(NULL);
     }
     bzero(&serialPortConfig, sizeof(serialPortConfig)); // clear struct for new port settings
+
+    if(deviceConfig.rs485_mode == RS485_ON)
+    {
+        struct serial_rs485 rs485conf;
+        rs485conf.flags |= SER_RS485_ENABLED;
+        rs485conf.flags |= SER_RS485_RTS_ON_SEND;
+        rs485conf.flags &= ~(SER_RS485_RTS_AFTER_SEND);
+        rs485conf.delay_rts_before_send = 0;
+        rs485conf.delay_rts_after_send = 0;
+
+        if (ioctl(threadFD->serialPort, TIOCSRS485, &rs485conf) < 0) {
+            LOG("Can not set RS485 mode for %s", deviceConfig.deviceName);
+        } else {
+            LOG("RS485 mode for %s is successfully set", deviceConfig.deviceName);
+        }
+    }
 
     // set config
     speed_t newBaudRate;
@@ -735,6 +756,22 @@ void *ClientThreadFunc(void *args)
         pthread_exit(NULL);
     }
     bzero(&serialPortConfig, sizeof(serialPortConfig)); // clear struct for new port settings
+
+    if(deviceConfig.rs485_mode == RS485_ON)
+    {
+        struct serial_rs485 rs485conf;
+        rs485conf.flags |= SER_RS485_ENABLED;
+        rs485conf.flags |= SER_RS485_RTS_ON_SEND;
+        rs485conf.flags &= ~(SER_RS485_RTS_AFTER_SEND);
+        rs485conf.delay_rts_before_send = 0;
+        rs485conf.delay_rts_after_send = 0;
+
+        if (ioctl(threadFD->serialPort, TIOCSRS485, &rs485conf) < 0) {
+            LOG("Can not set RS485 mode for %s", deviceConfig.deviceName);
+        } else {
+            LOG("RS485 mode for %s is successfully set", deviceConfig.deviceName);
+        }
+    }
 
     // set config
     speed_t newBaudRate;
@@ -1614,6 +1651,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     char UCIpathQuiet[MAX_CHARS_IN_UCIPATH]         = ".quiet";
     char UCIpathPackTimeout[MAX_CHARS_IN_UCIPATH]   = ".pack_timeout";
     char UCIpathPackSize[MAX_CHARS_IN_UCIPATH]      = ".pack_size";
+    char UCIpathRS485Mode[MAX_CHARS_IN_UCIPATH]      = ".rs485_mode";
     // -------------------------------------------- max = 15 symbols, use TMP_PATH_LENGTH
 
     char UCIpathNumber[MAX_DIGITS_IN_DEV_NUM];
@@ -1881,6 +1919,19 @@ device_config_t GetFullDeviceConfig(int deviceID)
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
     	deviceConfig.size_pack = atoi(UCIptr.o->v.string);
+
+    // rs485_mode
+    memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
+    strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
+    strncat(UCIpath, UCIpathRS485Mode, TMP_PATH_LENGTH);
+    if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
+            (UCIptr.o==NULL || UCIptr.o->v.string==NULL))
+    {
+        LOG("No UCI field %s \n", UCIpathRS485Mode);
+    }
+    if(UCIptr.flags & UCI_LOOKUP_COMPLETE) {
+        deviceConfig.rs485_mode = atoi(UCIptr.o->v.string);
+    }
 
     uci_free_context(UCIcontext);
     return deviceConfig;
