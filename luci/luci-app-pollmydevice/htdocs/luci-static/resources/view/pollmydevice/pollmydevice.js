@@ -50,6 +50,8 @@ return view.extend({
 					uci.add('pollmydevice', 'interface', section_id);
 					uci.set('pollmydevice', section_id, 'desc',name);
 					uci.set('pollmydevice', section_id, 'devicename','/dev/com1');
+					uci.set('pollmydevice', section_id, 'baudrate','9600');
+					uci.set('pollmydevice', section_id, 'bytesize','8');
 					uci.set('pollmydevice', section_id, 'mode','disabled');
 					this.addedSection = section_id;
 					return this.renderMoreOptionsModal(section_id);
