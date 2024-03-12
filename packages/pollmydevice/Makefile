@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=pollmydevice
 PKG_VERSION:=1
-PKG_RELEASE:=10
+PKG_RELEASE:=11
 PKG_BUILD_DIR:=$(BUILD_DIR)/pollmydevice
 
 PKG_MAINTAINER:=TELEOFIS
@@ -44,6 +44,8 @@ define Package/pollmydevice/install
 	$(CP) ./files/printk.sysctl $(1)/etc/sysctl.d/12-printk.conf
 	$(INSTALL_DIR) $(1)/usr/libexec/rpcd/
 	$(INSTALL_BIN) ./files/pollmydevice.rpcd $(1)/usr/libexec/rpcd/pollmydevice
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./files/pollmydevice.defaults $(1)/etc/uci-defaults/30_pollmydevice
 endef
 
 $(eval $(call BuildPackage,pollmydevice))
