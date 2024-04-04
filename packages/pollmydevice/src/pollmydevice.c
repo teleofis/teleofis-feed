@@ -1858,17 +1858,33 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.clientTimeout = atoi(UCIptr.o->v.string);
 
-    // client_id
-    memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
-    strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
-    strncat(UCIpath, UCIpathClientID, TMP_PATH_LENGTH);
-    if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
-        (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
+    FILE * pFuseFile;
+    char * serialNum = malloc(IMEI_LENGTH);
+
+    char serialNumPath[256];
+    snprintf(serialNumPath, sizeof(serialNumPath), "/tmp/pollmydevice/client_id%d", deviceID);
+    pFuseFile = fopen(serialNumPath, "r");
+    if (pFuseFile == NULL)
     {
-        LOG("No UCI field %s \n", UCIpathClientID);
+        deviceConfig.clientID = 0;
+        LOG("S/N for dev %d not found in the %s\n", deviceID, serialNumPath);
     }
-    if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
-        deviceConfig.clientID = strtoll(UCIptr.o->v.string, NULL, 10);
+    else
+    {
+        if (fgets(serialNum, IMEI_LENGTH+1, pFuseFile) == NULL)
+        {
+            deviceConfig.clientID = 0;
+            LOG("S/N for dev %d is incorrect\n", deviceID);
+        }
+        else
+        {
+            deviceConfig.clientID = strtoll(serialNum, NULL, 10);
+            LOG("S/N dev %d = %lld\n", deviceID, deviceConfig.clientID);
+        }
+    }
+    fclose(pFuseFile);
+    if (serialNum)
+        free(serialNum);
 
     //Modbus Gateway
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);

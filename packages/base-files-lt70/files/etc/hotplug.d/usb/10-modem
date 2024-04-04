@@ -23,6 +23,11 @@ case "$ACTION" in
                     ip link set $DEVICE_NAME name mobile
                     exit 0
                 fi
+                if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.3" ]; then
+                    DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
+                    ln -s /dev/$DEVICE_NAME /dev/gps0
+                    exit 0
+                fi
             ;;
         esac
     ;;
@@ -31,6 +36,7 @@ case "$ACTION" in
             "$A7602" )
                 rm /dev/ttyGSM1 
                 rm /dev/ttyGSM2
+                rm /dev/gps0
                 exit 0
             ;;
         esac

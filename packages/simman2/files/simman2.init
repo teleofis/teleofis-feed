@@ -55,7 +55,7 @@ start_service(){
 
 service_triggers()
 {
-        procd_add_reload_trigger "simman2"
+	procd_add_reload_trigger "simman2"
 }
 
 reload_service() {
@@ -64,7 +64,7 @@ reload_service() {
 }
 
 shutdown() {
-  stop
-  config_load 'simman2'
-  config_foreach modem_power_off 'simman2'
+	stop
+	config_load 'simman2'
+	config_foreach modem_power_off 'simman2'
 }

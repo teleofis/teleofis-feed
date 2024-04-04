@@ -31,7 +31,7 @@ int    sim1_status=-1,        // SIM1 status, 0 - detect, 1 - not detect, -1 - u
 	   first_start,
 	   active_sim;         // active SIM, 0 - SIM1, 1 - SIM2, -1 - unknown
 
-int8_t state,
+uint8_t state,
 	   changeCounter,
 	   changeCounterForReboot,
 	   retry;	   

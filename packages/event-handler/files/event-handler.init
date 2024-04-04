@@ -10,4 +10,7 @@ start() {
 	echo $usb_gpio > /sys/class/gpio/export
 	heat_gpio="$(uci -q get event-handler.@event-handler[0].heat_gpio)"
 	echo $heat_gpio > /sys/class/gpio/export
+	wd_gpio="$(uci -q get event-handler.@event-handler[0].wd_gpio)"
+	echo $wd_gpio > /sys/class/gpio/export
+	event-handler
 }

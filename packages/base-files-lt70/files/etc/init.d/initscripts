@@ -28,7 +28,7 @@ start()
 	echo 497 > /sys/class/gpio/export
 	echo low > /sys/class/gpio/gpio497/direction
 
-	ln -s /dev/ttyS2 /dev/gps0
 	ln -s /dev/ttyS1 /dev/com0
 	ln -s /dev/ttyS0 /dev/com1
+	ln -s /dev/ttyS2 /dev/com2
 }
