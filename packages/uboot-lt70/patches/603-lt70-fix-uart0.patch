@@ -1,0 +1,17 @@
+--- a/drivers/serial/serial_mtk.c
++++ b/drivers/serial/serial_mtk.c
+@@ -91,6 +91,11 @@ static void _mtk_serial_setbrg(struct mtk_serial_priv *priv, int baud,
+ {
+ 	u32 quot, realbaud, samplecount = 1;
+ 
++#ifdef CONFIG_SOC_MT7621
++	/* set highspeed mode = 0 for the uart0 */
++	writel(0, 0x1e000c24);
++#endif
++
+ 	/* Special case for low baud clock */
+ 	if (baud <= 115200 && clk_rate == 12000000) {
+ 		writel(3, &priv->regs->highspeed);
+-- 
+2.17.1
+
