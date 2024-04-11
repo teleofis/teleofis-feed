@@ -14,9 +14,12 @@ error()
 
 check_client_id()
 {
+	[ ! -d "/etc/pollmydevice" ] && mkdir -p "/etc/pollmydevice"
+	[ ! -d "/tmp/pollmydevice" ] && mkdir -p "/tmp/pollmydevice"
 	INTERFACE=$1
-	config_get CLIENT_ID INTERFACE client_id
-	if [ -z "$CLIENT_ID" ]; then
+	if [[ -e "/etc/pollmydevice/client_id$INTERFACE" ]]; then
+		cp /etc/pollmydevice/client_id$INTERFACE /tmp/pollmydevice/client_id$INTERFACE
+	else
 		. /usr/share/libubox/jshn.sh
 		json_load "$(ubus call system board)"
 		json_get_var MODEL model
@@ -37,8 +40,7 @@ check_client_id()
 				fi
 			;;
 		esac
-		uci_set pollmydevice "$INTERFACE" client_id "$CLIENT_ID"
-		uci_commit pollmydevice
+		echo $CLIENT_ID > /tmp/pollmydevice/client_id$INTERFACE
 	fi
 }
 
