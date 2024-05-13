@@ -2,7 +2,7 @@
 
 case "$1" in
 	list)
-		echo '{ "con_on": { }, "con_off": { }, "status": { } }'
+		echo '{ "con_on": { }, "con_off": { }, "status": { }, "get_id": { } }'
 	;;
 	call)
 		case "$2" in
@@ -17,6 +17,17 @@ case "$1" in
 			status)
 				status=$(/etc/pollmydevice/console status)
 				echo "{ \"status\": \"$status\" }"
+			;;
+			get_id)
+				echo '{'
+				for num in 0 1 2 3 4 5 6 7
+				do
+					value=$(cat /tmp/pollmydevice/client_id$num)
+					echo "\"id$num\": \"$value\","
+				done
+				value=$(cat /tmp/pollmydevice/client_id8)
+				echo "\"id8\": \"$value\""
+				echo '}'
 			;;
 		esac
 	;;

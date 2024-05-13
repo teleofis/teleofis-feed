@@ -4,7 +4,7 @@
 		"read": {
 			"uci": [ "pollmydevice" ],
 			"ubus": {
-				"pollmydevice": [ "status", "con_on", "con_off" ]
+				"pollmydevice": [ "status", "con_on", "con_off", "get_id" ]
 			}
 		},
 		"write": {

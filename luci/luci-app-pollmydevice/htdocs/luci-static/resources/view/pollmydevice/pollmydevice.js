@@ -23,14 +23,22 @@ var consoleEnable = rpc.declare({
 	expect: { '': {} }
 });
 
+var getID = rpc.declare({
+	object: 'pollmydevice',
+	method: 'get_id',
+	expect: { '': {} }
+});
+
 return view.extend({
 	load: function() {
 		return Promise.all([
-			consoleStatus()
+			consoleStatus(),
+			getID()
 		]);
 	},
 	render: function(rpc_replies) {
 		var status = rpc_replies[0];
+		var ids = rpc_replies[1];
 		var m, s, o;
 		
 		m = new form.Map('pollmydevice', _('PollMyDevice'));
@@ -159,6 +167,9 @@ return view.extend({
 		o = s.taboption('general', form.DummyValue, 'client_id', _('Client ID'));
 		o.modalonly = true;
 		o.depends({mode: 'client'});
+		o.cfgvalue = function(section_id) {
+			return ids['id' + section_id];
+		};
 
 		o = s.taboption('general', form.ListValue, 'modbus_gateway', _('Modbus TCP/IP'));
 		o.default = 0
