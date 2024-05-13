@@ -61,6 +61,8 @@ return view.extend({
 					uci.set('pollmydevice', section_id, 'baudrate','9600');
 					uci.set('pollmydevice', section_id, 'bytesize','8');
 					uci.set('pollmydevice', section_id, 'mode','disabled');
+					uci.set('pollmydevice', section_id, 'open_in_firewall','1')
+					uci.set('pollmydevice', section_id, 'server_port',String(30000+i))
 					this.addedSection = section_id;
 					return this.renderMoreOptionsModal(section_id);
 				};
@@ -90,9 +92,13 @@ return view.extend({
 		o.depends({mode: 'server'});
 		o.depends({mode: 'client'});
 
-		o = s.taboption('general', form.Value, 'server_port', _('Server Port'));
+		o = s.taboption('general', form.Value, 'server_port', _('Listening port'), _('Network port used for data exchange with a configurable serial port'));
 		o.modalonly = true;
 		o.datatype = 'and(uinteger, min(1025), max(65535))';
+		o.depends({mode: 'server'});
+
+		o = s.taboption('general', form.Flag, 'open_in_firewall', _("Open a port for incoming connections from the 'wan' zone"),_("A new rule for traffic in the firewall will be created, allowing connections to the specified network port from external networks. Access from the 'lan' zone is open by default for all network ports"))
+		o.modalonly = true;
 		o.depends({mode: 'server'});
 
 		o = s.taboption('general', form.ListValue, 'connection_mode', _('Connection Mode'));

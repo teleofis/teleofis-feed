@@ -72,3 +72,15 @@ msgstr "Alternating"
 
 msgid "Simultaneous"
 msgstr "Simultaneous"
+
+msgid "Listening port"
+msgstr "Listening port"
+
+msgid "Open a port for incoming connections from the 'wan' zone"
+msgstr "Open a port for incoming connections from the 'wan' zone"
+
+msgid "Network port used for data exchange with a configurable serial port"
+msgstr "Network port used for data exchange with a configurable serial port"
+
+msgid "A new rule for traffic in the firewall will be created, allowing connections to the specified network port from external networks. Access from the 'lan' zone is open by default for all network ports"
+msgstr "A new rule for traffic in the firewall will be created, allowing connections to the specified network port from external networks. Access from the 'lan' zone is open by default for all network ports"

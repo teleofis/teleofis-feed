@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=pollmydevice
 PKG_VERSION:=1
-PKG_RELEASE:=11
+PKG_RELEASE:=12
 PKG_BUILD_DIR:=$(BUILD_DIR)/pollmydevice
 
 PKG_MAINTAINER:=TELEOFIS

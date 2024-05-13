@@ -44,11 +44,41 @@ check_client_id()
 	fi
 }
 
+clear_firewall_settings()
+{
+	RULE=$(uci show firewall | grep -m1 port-pollmydevice)
+	while [[ -n "$RULE" ]]; do
+		RULE_N=$(echo $RULE | cut -d[ -f2 | cut -d] -f1)
+		uci delete firewall.@rule[$RULE_N]
+		RULE=$(uci show firewall | grep -m1 port-pollmydevice)
+	done
+	uci commit firewall
+}
+
+open_firewall_port()
+{
+	config_get MODE "$1" mode
+	if [[ "$MODE" == "server" ]]; then
+		config_get OPEN "$1" open_in_firewall
+		if [[ "$OPEN" -eq "1" ]]; then
+			config_get DESCRIPTION "$1" desc
+			config_get PORT "$1" server_port
+			RULE=$(uci add firewall rule)
+			uci set firewall.$RULE.name=$DESCRIPTION-$1-port-pollmydevice
+			uci set firewall.$RULE.src='wan'
+			uci set firewall.$RULE.proto='tcp'
+			uci set firewall.$RULE.target='ACCEPT'
+			uci set firewall.$RULE.dest_port=$PORT
+			uci commit firewall
+		fi
+	fi
+}
+
 start_service_daemon()
 {
 	procd_open_instance
 	procd_set_param command "$DIR/$PROG"
-	procd_set_param respawn
+	procd_set_param respawn ${respawn_threshold:-360} ${respawn_timeout:-5} ${respawn_retry:-0}
 	procd_close_instance
 }
 
@@ -56,6 +86,9 @@ start_service()
 {
 	config_load 'pollmydevice'
 	config_foreach check_client_id 'interface'
+	clear_firewall_settings
+	config_foreach open_firewall_port 'interface'
+	/etc/init.d/firewall restart 2>/dev/null
 	start_service_daemon
 }
 

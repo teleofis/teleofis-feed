@@ -13,6 +13,7 @@ case "$MODEL" in
 		uci set pollmydevice.2.baudrate='9600'
 		uci set pollmydevice.2.bytesize='8'
 		uci set pollmydevice.2.rs485_mode='1'
+		uci set pollmydevice.2.open_in_firewall='1'
 		uci commit pollmydevice
 	;;
 	"TELEOFIS RTUx68 RE-DE")
