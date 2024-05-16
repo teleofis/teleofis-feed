@@ -63,13 +63,16 @@ open_firewall_port()
 		if [[ "$OPEN" -eq "1" ]]; then
 			config_get DESCRIPTION "$1" desc
 			config_get PORT "$1" server_port
-			RULE=$(uci add firewall rule)
-			uci set firewall.$RULE.name=$DESCRIPTION-$1-port-pollmydevice
-			uci set firewall.$RULE.src='wan'
-			uci set firewall.$RULE.proto='tcp'
-			uci set firewall.$RULE.target='ACCEPT'
-			uci set firewall.$RULE.dest_port=$PORT
-			uci commit firewall
+			if [[ -n "$PORT" ]] && [[ -n "$DESCRIPTION" ]]; then
+				DESCRIPTION=$(echo $DESCRIPTION | tr -d ' ')
+				RULE=$(uci add firewall rule)
+				uci set firewall.$RULE.name=$DESCRIPTION-$1-port-pollmydevice
+				uci set firewall.$RULE.src='wan'
+				uci set firewall.$RULE.proto='tcp'
+				uci set firewall.$RULE.target='ACCEPT'
+				uci set firewall.$RULE.dest_port=$PORT
+				uci commit firewall
+			fi
 		fi
 	fi
 }

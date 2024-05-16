@@ -71,6 +71,9 @@ return view.extend({
 		};
 
 		o = s.taboption('general', form.Value, 'desc', _('Description'));
+		o.rmempty = false;
+		o.optional = false;
+		o.datatype = 'uciname';
 
 		o = s.taboption('serial', form.Value, 'devicename', _('Port'));
 		o.rmempty = false;
@@ -94,7 +97,9 @@ return view.extend({
 
 		o = s.taboption('general', form.Value, 'server_port', _('Listening port'), _('Network port used for data exchange with a configurable serial port'));
 		o.modalonly = true;
-		o.datatype = 'and(uinteger, min(1025), max(65535))';
+		o.rmempty = false;
+		o.optional = false;
+		o.datatype = 'or(502,range(1025,65535))';
 		o.depends({mode: 'server'});
 
 		o = s.taboption('general', form.Flag, 'open_in_firewall', _("Open a port for incoming connections from the 'wan' zone"),_("A new rule for traffic in the firewall will be created, allowing connections to the specified network port from external networks. Access from the 'lan' zone is open by default for all network ports"))
@@ -150,8 +155,10 @@ return view.extend({
 
 		o = s.taboption('general', form.Value, 'client_port', _('Server Port'));
 		o.modalonly = true;
+		o.rmempty = false;
+		o.optional = false;
 		o.default = 6008;
-		o.datatype = 'and(uinteger, min(1025), max(65535))';
+		o.datatype = 'or(502,range(1025,65535))';
 		o.depends({mode: 'client'});
 
 		o = s.taboption('general', form.Value, 'client_timeout', _('Client Reconnection Timeout (sec)'));
