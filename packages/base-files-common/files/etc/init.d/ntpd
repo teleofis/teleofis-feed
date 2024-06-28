@@ -21,7 +21,7 @@ emit() {
 validate_ntp_section() {
 	uci_load_validate system timeserver "$1" "$2" \
 		'server:list(host)' 'enabled:bool:1' 'enable_server:bool:0' \
-		'interface:list(string)' 'use_gps:bool:0'
+		'interface:list(string)' 'use_gps:bool:0'  'gps_time1:float:0.35'
 }
 
 start_ntpd_instance() {
@@ -77,7 +77,7 @@ start_ntpd_instance() {
 
 	if [ "$use_gps" != 0 ]; then
 		emit "server 127.127.28.0 minpoll 4 maxpoll 4"
-		emit "fudge 127.127.28.0 time1 0.35 flag1 1 refid GPS"
+		emit "fudge 127.127.28.0 time1 $gps_time1 flag1 1 refid GPS"
 		emit "server 127.127.28.2 minpoll 4 maxpoll 4 prefer"
 		emit "fudge 127.127.28.2 refid PPS"
 	fi

@@ -11,6 +11,8 @@ case "$ACTION" in
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.4" ]; then
                     DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
                     ln -s /dev/$DEVICE_NAME /dev/ttyGSM1
+                    COMMAND="at+cgnsspwr=1,0,1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                    COMMAND="at+cgnsstst=1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
                     exit 0
                 fi
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.5" ]; then

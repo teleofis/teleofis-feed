@@ -15,6 +15,7 @@ config timeserver 'ntp'
 	list server '3.openwrt.pool.ntp.org'
 	option enable_server '1'
 	option use_gps '1'
+	option gps_time1 '0.05'
 
 config led
 	option name 'Power'
@@ -34,5 +35,13 @@ config led
 	option sysfs 'bottom:act'
 	option trigger 'netdev'
 	option dev '3g-internet'
+	list mode 'tx'
+	list mode 'rx'
+
+config led
+	option name 'Wlan'
+	option sysfs 'optional:wlan'
+	option trigger 'netdev'
+	option dev 'wlan0'
 	list mode 'tx'
 	list mode 'rx'
