@@ -41,8 +41,13 @@ if [[ "$(echo $((INTS_MASK & 8)))" == "8" ]]; then
 fi
 
 if [[ "$(echo $((INTS_MASK & 16)))" == "16" ]]; then
-	VALUE=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
-	echo "$DATE: input voltage: $VALUE mV" >> $LOG
+	input_voltage="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)"
+	voltage_threshold="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/voltage_threshold)"
+	poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
+	if [[ "$input_voltage" -lt "$voltage_threshold" ]]; then
+		echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
+		echo "$DATE: input voltage: $input_voltage mV, disable poe out" >> $LOG
+	fi
 fi
 
 if [[ "$(wc -l < $LOG)" -ge "100" ]]; then

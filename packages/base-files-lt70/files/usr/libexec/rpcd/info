@@ -7,12 +7,19 @@ case "$1" in
 	call)
 		case "$2" in
 			info)
-				temp=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/temp)
-				temp="$temp °C"
-				svfw=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/fw_version)
-				blfw=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/bl_version)
 				input_voltage=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
-				input_voltage=$((input_voltage + 800))
+				if [[ "$?" -ne "0" ]]; then
+					input_voltage="n/a"
+					temp="n/a"
+					svfw="n/a"
+					blfw="n/a"
+				else
+					input_voltage=$((input_voltage + 800))
+					temp=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/temp)
+					temp="$temp °C"
+					svfw=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/fw_version)
+					blfw=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/bl_version)
+				fi
 				echo '{'
 				echo "\"temperature\": \"$temp\" ,"
 				echo "\"svfw\": \"$svfw\", "
