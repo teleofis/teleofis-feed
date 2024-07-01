@@ -268,7 +268,7 @@ new file mode 100644
 index 0000000..18996ef
 --- /dev/null
 +++ b/configs/mt7621_teleofis_lt70_defconfig
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,115 @@
 +CONFIG_MIPS=y
 +CONFIG_SYS_HAS_NONCACHED_MEMORY=y
 +CONFIG_SYS_MALLOC_LEN=0x100000
@@ -380,6 +380,10 @@ index 0000000..18996ef
 +CONFIG_IPADDR="192.168.88.1"
 +CONFIG_USE_SERVERIP=y
 +CONFIG_SERVERIP="192.168.88.11"
++CONFIG_BOOTDELAY=3
++CONFIG_AUTOBOOT_KEYED=y
++CONFIG_AUTOBOOT_PROMPT="Type password to abort autoboot in %2d seconds\n"
++CONFIG_AUTOBOOT_STOP_STR="root"
 diff --git a/include/configs/lt70.h b/include/configs/lt70.h
 new file mode 100644
 index 0000000..a957494
