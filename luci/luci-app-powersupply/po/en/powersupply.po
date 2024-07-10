@@ -1,0 +1,26 @@
+msgid "PowerSupply"
+msgstr "PowerSupply"
+
+msgid "Power Supply"
+msgstr "Power Supply"
+
+msgid "Input Voltage"
+msgstr "Input Voltage"
+
+msgid "Input Voltage Threshold"
+msgstr "Input Voltage Threshold"
+
+msgid "PoE OUT power"
+msgstr "PoE OUT power"
+
+msgid "PoE OUT control"
+msgstr "PoE OUT control"
+
+msgid "USB power"
+msgstr "USB power"
+
+msgid "USB control"
+msgstr "USB control"
+
+msgid "7.5V power"
+msgstr "7.5V power"

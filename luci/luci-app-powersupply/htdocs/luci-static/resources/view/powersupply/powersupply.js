@@ -30,7 +30,6 @@ return view.extend({
 		var m, s, o;
 
 		m = new form.Map('powersupply', _('Power Supply'));
-		m.description = _('Power Supply description');
 
 		s = m.section(form.NamedSection, 'system', _('System Properties'));
 

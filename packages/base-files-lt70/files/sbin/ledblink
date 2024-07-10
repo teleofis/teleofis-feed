@@ -1,0 +1,17 @@
+#!/bin/sh
+
+COUNT=0
+sleep 2
+while [ "$COUNT" -le "4" ]; do
+	echo 0 >  /sys/class/leds/bottom:act/brightness
+	echo 0 >  /sys/class/leds/middle:net/brightness
+	echo 0 >  /sys/class/leds/top:power/brightness
+	sleep 0.3
+	echo 1 >  /sys/class/leds/bottom:act/brightness
+	echo 1 >  /sys/class/leds/middle:net/brightness
+	echo 1 >  /sys/class/leds/top:power/brightness
+	sleep 0.3
+	COUNT=$((COUNT+1))
+done
+
+return 0

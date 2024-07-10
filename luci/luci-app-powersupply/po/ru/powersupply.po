@@ -1,0 +1,26 @@
+msgid "PowerSupply"
+msgstr "Управление питанием"
+
+msgid "Power Supply"
+msgstr "Управление питанием"
+
+msgid "Input Voltage"
+msgstr "Входное напряжение"
+
+msgid "Input Voltage Threshold"
+msgstr "Порог входного напряжения"
+
+msgid "PoE OUT power"
+msgstr "Питание PoE OUT"
+
+msgid "PoE OUT control"
+msgstr "Управление PoE OUT"
+
+msgid "USB power"
+msgstr "Питание USB"
+
+msgid "USB control"
+msgstr "Управление USB"
+
+msgid "7.5V power"
+msgstr "Питание 7.5V"

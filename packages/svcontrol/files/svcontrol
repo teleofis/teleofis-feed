@@ -8,12 +8,9 @@ while sleep 5; do
 		sleep 5
 		temp=$(cat /sys/bus/i2c/devices/0-0011/temp)
 		if [[ "$?" -ne "0" ]]; then
-			stm32flash -a 0x22 /dev/i2c-0 &>/dev/null
-			if [[ "$?" -ne "0" ]]; then
-				echo high > /sys/class/gpio/gpio506/direction
-				sleep 1
-				echo low > /sys/class/gpio/gpio506/direction
-			fi
+			echo high > /sys/class/gpio/gpio506/direction
+			sleep 1
+			echo low > /sys/class/gpio/gpio506/direction
 		fi
 	fi
 done
