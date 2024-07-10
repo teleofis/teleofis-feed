@@ -3,6 +3,7 @@
 # Copyright (C) 2010 Vertical Communications
 
 include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/version.mk
 
 PKG_NAME:=base-files-rtux68
 PKG_VERSION:=1
@@ -33,6 +34,8 @@ endef
 
 define Package/base-files-rtux68/install
 	$(CP) ./files/* $(1)/
+	$(VERSION_SED_SCRIPT) $(1)/etc/banner
+	$(VERSION_SED_SCRIPT) $(1)/etc/openwrt_release
 endef
 
 $(eval $(call BuildPackage,base-files-rtux68))

@@ -3,13 +3,13 @@
 # Copyright (C) 2010 Vertical Communications
 
 include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/version.mk
+include $(INCLUDE_DIR)/package.mk
 
 PKG_NAME:=base-files-lt70
 PKG_VERSION:=1
 PKG_RELEASE:=0
 PKG_BUILD_DIR:=$(BUILD_DIR)/base-files-lt70
-
-include $(INCLUDE_DIR)/package.mk
 
 define Package/base-files-lt70
   SECTION:=utils
@@ -33,6 +33,8 @@ endef
 
 define Package/base-files-lt70/install
 	$(CP) ./files/* $(1)/
+	$(VERSION_SED_SCRIPT) $(1)/etc/banner
+	$(VERSION_SED_SCRIPT) $(1)/etc/openwrt_release
 endef
 
 $(eval $(call BuildPackage,base-files-lt70))
