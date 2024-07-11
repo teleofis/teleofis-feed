@@ -1,10 +1,10 @@
 #!/bin/sh
 
 if [ "${ACTION}" = "released" ]; then
-	logger "gd3x: waiting for interrupt"
+	#logger "gd3x: waiting for interrupt"
 fi
 
 if [ "${ACTION}" = "pressed" ]; then
 	event-handler
-	logger "gd3x: new interrupt"
+	#logger "gd3x: new interrupt"
 fi

@@ -9,6 +9,7 @@ DATE=$(date)
 INTS_MASK=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/int_sum)
 touch $LOG
 
+# poe out power error int
 if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
 	VALUE=$(cat /sys/class/gpio/gpio$POE/value)
 	if [[ "$VALUE" == "1" ]]; then
@@ -18,6 +19,7 @@ if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
 	fi
 fi
 
+# usb power error int
 if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
 	VALUE=$(cat /sys/class/gpio/gpio$USB/value)
 	if [[ "$VALUE" == "1" ]]; then
@@ -27,6 +29,7 @@ if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
 	fi
 fi
 
+# heat int
 if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
 	VALUE=$(cat /sys/class/gpio/gpio$HEAT/value)
 	if [[ "$VALUE" == "1" ]]; then
@@ -36,10 +39,12 @@ if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
 	fi
 fi
 
+# wd toggle int
 if [[ "$(echo $((INTS_MASK & 8)))" == "8" ]]; then
 	VALUE=$(cat /sys/class/gpio/gpio$WD/value)
 fi
 
+# voltage threshold int
 if [[ "$(echo $((INTS_MASK & 16)))" == "16" ]]; then
 	input_voltage="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)"
 	voltage_threshold="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/voltage_threshold)"
