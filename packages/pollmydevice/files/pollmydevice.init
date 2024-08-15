@@ -24,8 +24,11 @@ check_client_id()
 		json_load "$(ubus call system board)"
 		json_get_var MODEL model
 		case "$MODEL" in
-			"TELEOFIS LT70")
-				CLIENT_ID=$(head -c 1000 /dev/urandom | tr -dc '0-9' | cut -c -15)
+			"TELEOFIS LT70" | "TELEOFIS LT70U")
+				CLIENT_ID=$(simman2_cli -d /dev/ttyGSM1 -I)
+				CLIENT_ID=${CLIENT_ID:1}
+				CLIENT_ID="$CLIENT_ID$INTERFACE"
+				echo $CLIENT_ID > /etc/pollmydevice/client_id$INTERFACE
 			;;
 			"TELEOFIS RTUx68")
 				SERIALNUM=$((0x$(getserialnum)))

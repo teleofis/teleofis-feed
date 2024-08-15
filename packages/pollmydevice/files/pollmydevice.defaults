@@ -16,6 +16,13 @@ case "$MODEL" in
 		uci set pollmydevice.2.open_in_firewall='1'
 		uci commit pollmydevice
 	;;
+	"TELEOFIS LT70U")
+		uci set pollmydevice.0.rs485_mode='1'
+		uci set pollmydevice.1.mode='server'
+		uci set pollmydevice.1.baudrate='115200'
+		uci commit pollmydevice
+		sleep 30 && /etc/pollmydevice/console disable &
+	;;
 	"TELEOFIS RTUx68 RE-DE")
 		uci set pollmydevice.0.rs485_mode='1'
 		uci set pollmydevice.2.rs485_mode='1'
