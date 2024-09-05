@@ -72,7 +72,7 @@ return view.extend({
 
 		o = s.taboption('general', form.DynamicList, 'testip', _('IP address of remote servers'));
 		o.rmempty = false;
-		o.datatype = 'ipaddr';
+		o.datatype = 'host';
 
 		o = s.taboption('general', form.Value, 'csq_level', _('Minimum acceptable signal level, ASU (min: 1, max: 31)'), _('0 - not used'));
 		o.rmempty = false;
@@ -138,7 +138,7 @@ return view.extend({
 		o.password = true;
 
 		o = s.taboption('sim0', form.DynamicList, 'sim0_testip', _('IP address of remote servers'));
-		o.datatype = 'ipaddr';
+		o.datatype = 'host';
 		o.modalonly = true;
 
 		o = s.taboption('sim1', form.ListValue, 'sim1_priority', _('Priority'));
@@ -171,7 +171,7 @@ return view.extend({
 		o.password = true;
 
 		o = s.taboption('sim1', form.DynamicList, 'sim1_testip', _('IP address of remote servers'));
-		o.datatype = 'ipaddr';
+		o.datatype = 'host';
 		o.modalonly = true;
 
 		o = s.taboption('info', DummyValueExt, 'modem', _('Modem'));
