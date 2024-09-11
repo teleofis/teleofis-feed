@@ -156,6 +156,49 @@ int sim7600_network_type(char *receive, char *device){
 	return 0;
 }
 
+int sim7600_operator(char *receive, char *device){
+	char operator[128];
+	char mcc[128];
+
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(operator,device,"\rAT+COPS?\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(cut_string(operator, "\"", "\",")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	cut_string(operator, "", " ");
+
+	if(modem_send_command(mcc,device,"\rAT+CPSI?\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(cut_string(mcc, "Online,", ",")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	for (int i = 0; i < strlen(mcc); i++) {
+        if (mcc[i] == '-') {
+            memmove(&mcc[i], &mcc[i+1], strlen(mcc) - i - 1);
+			mcc[strlen(mcc)-1]='\0';
+            break;
+        }
+    }
+
+	sprintf(receive,"%s (%s)",operator,mcc);
+	return 0;
+}
+
 int sim7600_band_info(char *receive, char *device){
 	char buf[256]={0};
 	if(modem_common_send_at(device)!=0){
@@ -318,6 +361,7 @@ struct modems_ops sim7600_ops = {
 		.band_info			= sim7600_band_info,
 		.network_type		= sim7600_network_type,
 		.data_registration	= modem_common_data_registration,
+		.operator			= sim7600_operator,
 		.data_type			= sim7600_data_type,
 		.sim_pullout		= modem_common_sim_pullout,
 		.sim_pullup			= modem_common_sim_pullup,

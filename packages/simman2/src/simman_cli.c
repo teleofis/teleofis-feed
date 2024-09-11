@@ -41,6 +41,7 @@ int GetAllInfo(struct settings_entry *settings)
 		fprintf(stdout, "  \"imsi\": \"%s\",\n", modem_summary(modem,INFO_IMSI, settings->atdevice));
 		fprintf(stdout, "  \"sim_state\": \"%s\",\n", GetSimInfo(settings));
 		fprintf(stdout, "  \"pin_state\": \"%s\",\n", modem_summary(modem,INFO_PINSTAT, settings->atdevice));
+		fprintf(stdout, "  \"operator\": \"%s\",\n", modem_summary(modem,INFO_OP, settings->atdevice));
 		fprintf(stdout, "  \"csq\": \"%s\",\n", modem_summary(modem,INFO_SIGLEV, settings->atdevice));
 		fprintf(stdout, "  \"net_reg\": \"%s\",\n", modem_summary(modem,INFO_REGSTAT, settings->atdevice));
 		fprintf(stdout, "  \"net_type\": \"%s\",\n", modem_summary(modem,INFO_NETTYPE, settings->atdevice));
@@ -56,7 +57,7 @@ int GetAllInfo(struct settings_entry *settings)
 	return 0;
 }
 
-static const char *optString = "d:a:s:x:o:cprbnimfRBSDIh?";
+static const char *optString = "d:a:s:x:o:cprbnimfRBSDIPh?";
 static const struct option longOpts[] = {
 		{"device",required_argument, NULL,'d'},		
 		{"get-sim",required_argument, NULL,'s' },
@@ -73,6 +74,7 @@ static const struct option longOpts[] = {
 		{"get-imei",no_argument, NULL,'I'},
 		{"get-modem",no_argument, NULL,'m'},
 		{"get-fw",no_argument, NULL,'f'},
+		{"get-plmn",no_argument, NULL,'P'},
 		{"all",required_argument, NULL,'a'},
 		{"power-off",required_argument, NULL,'x'},
 		{"power-up",required_argument, NULL,'o'},
@@ -99,6 +101,7 @@ void display_usage(void)
 			"  --get-imei, -I:                  Get IMEI modem\n"
 			"  --get-modem, -m:                 Get modem type\n"
 			"  --get-fw, -f:                    Get firmware version\n"
+			"  --get-op, -P:                    Get currently selected operator\n"
 			"       OR\n"
 			"  --all=CONFIG, -a CONFIG:         Get all information about the requested CONFIG\n"
 			"  --get-sim=CONFIG, -s CONFIG:     Get SIM information\n"
@@ -160,6 +163,9 @@ int main(int argc, char **argv)
 				break;
 			case 'f':
 				cmd=INFO_FW;
+				break;
+			case 'P':
+				cmd=INFO_OP;
 				break;
 			case 'a':
 				cmd=INFO_ALL;

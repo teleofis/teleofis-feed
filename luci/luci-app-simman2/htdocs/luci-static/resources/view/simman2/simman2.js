@@ -195,6 +195,9 @@ return view.extend({
 		o = s.taboption('info', DummyValueExt, 'pincode_stat', _('Pincode Status'));
 		o.modalonly = true;
 
+		o = s.taboption('info', DummyValueExt, 'operator', _('Operator'));
+		o.modalonly = true;
+
 		o = s.taboption('info', DummyValueExt, 'sig_lev', _('Signal Strength'));
 		o.modalonly = true;
 
@@ -229,6 +232,7 @@ return view.extend({
 				document.getElementById('cbid.simman2.%s.imsi'.format(section_id)).textContent = t.imsi || 'n/a';
 				document.getElementById('cbid.simman2.%s.sim'.format(section_id)).textContent = t.sim_state || 'n/a';
 				document.getElementById('cbid.simman2.%s.pincode_stat'.format(section_id)).textContent = t.pin_state || 'n/a';
+				document.getElementById('cbid.simman2.%s.operator'.format(section_id)).textContent = t.operator || 'n/a';
 				document.getElementById('cbid.simman2.%s.sig_lev'.format(section_id)).textContent = t.csq || 'n/a';
 				document.getElementById('cbid.simman2.%s.reg_stat'.format(section_id)).textContent = t.net_reg || 'n/a';				
 				document.getElementById('cbid.simman2.%s.net_type'.format(section_id)).textContent = t.net_type || 'n/a';

@@ -164,3 +164,6 @@ msgstr "Настройки SIM2"
 
 msgid "Service type"
 msgstr "Тип службы"
+
+msgid "Operator"
+msgstr "Оператор"

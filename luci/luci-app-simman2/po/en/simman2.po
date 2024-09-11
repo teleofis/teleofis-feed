@@ -65,3 +65,6 @@ msgstr "Password"
 
 msgid "SIM2 settings"
 msgstr "SIM2 settings"
+
+msgid "Operator"
+msgstr "Operator"

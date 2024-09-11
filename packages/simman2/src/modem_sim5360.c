@@ -289,6 +289,7 @@ struct modems_ops sim5360_ops = {
 		.band_info			= sim5360_band_info,
 		.network_type		= sim5360_network_type,
 		.data_registration	= modem_common_data_registration,
+		.operator			= modem_common_operator,
 		.data_type			= sim5360_data_type,
 		.sim_pullout		= sim5360_sim_pullout,
 		.sim_pullup			= sim5360_sim_pullup,

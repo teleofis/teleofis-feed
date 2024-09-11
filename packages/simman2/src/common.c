@@ -801,6 +801,9 @@ char *modem_summary(struct modems_ops *modem, uint8_t InfoParam, char *dev)
 		case INFO_PACKTYPE:
 			modem->data_type(b,dev);
 			break;
+		case INFO_OP:
+			modem->operator(b,dev);
+			break;
 		case INFO_IMEI:
 			if(modem->imei(b,dev)){
 				strcpy(b,"NONE");

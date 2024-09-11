@@ -285,6 +285,7 @@ struct modems_ops sim5300_ops = {
 		.band_info			= sim5300_band_info,
 		.network_type		= sim5300_network_type,
 		.data_registration	= modem_common_data_registration,
+		.operator			= modem_common_operator,
 		.data_type			= sim5300_data_type,
 		.sim_pullout		= sim5300_sim_pullout,
 		.sim_pullup			= sim5300_sim_pullup,

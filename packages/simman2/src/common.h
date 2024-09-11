@@ -21,6 +21,7 @@
 #define	INFO_ALL 		14
 #define	POWER_OFF 		15
 #define	POWER_UP 		16
+#define	INFO_OP 		17
 
 #define IN		0
 #define OUT		1
@@ -95,6 +96,7 @@ struct modems_ops{
 	int (*network_type)(char *,char *);
 	int (*data_registration)(char *,char *);
 	int (*data_type)(char *,char *);
+	int (*operator)(char *,char *);
 	int (*sim_pullout)(struct settings_entry *);
 	int (*sim_pullup)(struct settings_entry *);
 	int (*power_down)(struct settings_entry *);
@@ -118,6 +120,7 @@ int modem_common_csq(char *receive, char *device);
 int modem_common_imsi(char *receive, char *device);
 int modem_common_registration(char *receive, char *device);
 int modem_common_data_registration(char *receive, char *device);
+int modem_common_operator(char *receive, char *device);
 int modem_common_exist(char *device);
 int modem_common_power_down(struct settings_entry *settings, struct modems_ops *modem);
 int modem_common_power_up(struct settings_entry *settings, struct modems_ops *modem);

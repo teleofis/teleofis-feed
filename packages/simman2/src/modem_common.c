@@ -118,6 +118,49 @@ int modem_common_data_registration(char *receive, char *device){
 	return 0;
 }
 
+int modem_common_operator(char *receive, char *device){
+	char operator[128];
+	char mcc[128];
+
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(receive,device,"\rAT+COPS=0,0\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(operator,device,"\rAT+COPS?\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(cut_string(operator, "\"", "\",")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(receive,device,"\rAT+COPS=0,2\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(modem_send_command(mcc,device,"\rAT+COPS?\r","OK")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	if(cut_string(mcc, "\"", "\",")!=0){
+		strcpy(receive,"ERROR");
+		return -1;
+	}
+
+	sprintf(receive,"%s (%s)",operator,mcc);
+	return 0;
+}
+
 int modem_common_imsi(char *receive, char *device){
 	if(modem_common_send_at(device)!=0){
 		strcpy(receive,"ERROR");

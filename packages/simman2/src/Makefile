@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O3 -Wall -Wmissing-declarations -g3
+CFLAGS = -O2 -Wall -Wmissing-declarations -g3
 LDLIBS = -luci -lubox
 
 PROGRAMS=simman2 simman2_cli
