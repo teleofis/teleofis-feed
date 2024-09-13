@@ -53,10 +53,22 @@ start_service_daemon() {
 	[ -n "${server_active}" ] && echo "ServerActive=${server_active}" >> ${TMP_CONFIG}
 	[ -n "${tls_connect}" ] && echo "TLSConnect=${tls_connect}" >> ${TMP_CONFIG}
 	[ -n "${tls_psk_identity}" ] && echo "TLSPSKIdentity=${tls_psk_identity}" >> ${TMP_CONFIG}
-	[ -n "${tls_psk_file}" ] && echo "TLSPSKFile=${tls_psk_file}" >> ${TMP_CONFIG}
-	[ -n "${tls_ca_file}" ] && echo "TLSCAFile=${tls_ca_file}" >> ${TMP_CONFIG}
-	[ -n "${tls_cert_file}" ] && echo "TLSCertFile=${tls_cert_file}" >> ${TMP_CONFIG}
-	[ -n "${tls_key_file}" ] && echo "TLSKeyFile=${tls_key_file}" >> ${TMP_CONFIG}
+	[ -n "${tls_psk_file}" ] && {
+		echo "TLSPSKFile=${tls_psk_file}" >> ${TMP_CONFIG}
+		chmod 644 ${tls_psk_file}
+	}
+	[ -n "${tls_ca_file}" ] && {
+		echo "TLSCAFile=${tls_ca_file}" >> ${TMP_CONFIG}
+		chmod 644 ${tls_ca_file}
+	}
+	[ -n "${tls_cert_file}" ] && {
+		echo "TLSCertFile=${tls_cert_file}" >> ${TMP_CONFIG}
+		chmod 644 ${tls_cert_file}
+	}
+	[ -n "${tls_key_file}" ] && {
+		echo "TLSKeyFile=${tls_key_file}" >> ${TMP_CONFIG}
+		chmod 644 ${tls_key_file}
+	}
 
 	procd_open_instance
 	procd_set_param command ${PROG} -c ${CONFIG} -f

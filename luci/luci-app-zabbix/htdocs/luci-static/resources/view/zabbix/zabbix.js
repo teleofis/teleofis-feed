@@ -34,7 +34,7 @@ return view.extend({
 		o.rmempty = false;
 		o.datatype = 'or(cidr,ipmask,host)';
 
-		o = s.taboption('passive', form.Value, 'listen_ip', _('ListenIP'), _('The agent will listen on this port for connections from the server. Incoming connections will be accepted only from hosts specified here.'));
+		o = s.taboption('passive', form.Value, 'listen_ip', _('ListenIP'), _('Incoming connections will only be accepted from hosts specified here.'));
 		o.datatype = 'host';
 
 		o = s.taboption('passive', form.Value, 'listen_port', _('ListenPort'), _('The agent will listen on this port for connections from the server.'));

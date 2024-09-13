@@ -28,8 +28,8 @@ msgstr "Server"
 msgid "IP address or hostname of the Zabbix server."
 msgstr "IP address or hostname of the Zabbix server."
 
-msgid "The agent will listen on this port for connections from the server. Incoming connections will be accepted only from hosts specified here."
-msgstr "The agent will listen on this port for connections from the server. Incoming connections will be accepted only from hosts specified here."
+msgid "Incoming connections will only be accepted from hosts specified here."
+msgstr "Incoming connections will only be accepted from hosts specified here."
 
 msgid "ListenPort"
 msgstr "ListenPort"
