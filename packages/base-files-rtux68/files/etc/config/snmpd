@@ -1,28 +1,15 @@
 config agent
-	option agentaddress UDP:161,UDP6:161
-
-config agentx
-	option agentxsocket /var/run/agentx.sock
+	option agentaddress UDP:161
 
 config com2sec public
 	option secname ro
 	option source default
 	option community public
 
-config com2sec private
-	option secname rw
-	option source localhost
-	option community private
-
 config com2sec6 public6
 	option secname ro
 	option source default
 	option community public
-
-config com2sec6 private6
-	option secname rw
-	option source localhost
-	option community private
 
 config group public_v1
 	option group public
@@ -33,26 +20,6 @@ config group public_v2c
 	option group public
 	option version v2c
 	option secname ro
-
-config group public_usm
-	option group public
-	option version usm
-	option secname ro
-
-config group private_v1
-	option group private
-	option version v1
-	option secname rw
-
-config group private_v2c
-	option group private
-	option version v2c
-	option secname rw
-
-config group private_usm
-	option group private
-	option version usm
-	option secname rw
 
 config view all
 	option viewname all
@@ -69,23 +36,7 @@ config access public_access
 	option write none
 	option notify none
 
-config access private_access
-	option group private
-	option context none
-	option version any
-	option level noauth
-	option prefix exact
-	option read all
-	option write all
-	option notify all
-
 config system
-	option sysLocation	'office'
-	option sysContact	'bofh@example.com'
-	option sysName		'HeartOfGold'
-#	option sysServices	72
-#	option sysDescr		'adult playground'
-#	option sysObjectID	'1.2.3.4'
 
 config engineid
 #	option engineid 'LEDE'
@@ -120,7 +71,8 @@ config engineid
 #	option trapsess	'-v 3 -e 0x80001f88808c18d3f7b0000 -u trapuser -a MD5 -A administrator -l authPriv -x DES -X rootpasswd udp:127.0.0.1:162'
 
 config snmpd general
-	option enabled '1'
+	option enabled '0'
+	option ip_family 'ipv4'
 #	list network 'wan'
 
 config exec
