@@ -101,7 +101,7 @@ void display_usage(void)
 			"  --get-imei, -I:                  Get IMEI modem\n"
 			"  --get-modem, -m:                 Get modem type\n"
 			"  --get-fw, -f:                    Get firmware version\n"
-			"  --get-op, -P:                    Get currently selected operator\n"
+			"  --get-plmn, -P:                    Get currently selected operator\n"
 			"       OR\n"
 			"  --all=CONFIG, -a CONFIG:         Get all information about the requested CONFIG\n"
 			"  --get-sim=CONFIG, -s CONFIG:     Get SIM information\n"
