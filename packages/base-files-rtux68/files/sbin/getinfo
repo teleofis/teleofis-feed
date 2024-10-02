@@ -2,7 +2,8 @@
 
 unsupported_request(){
 	echo "Unsupported request: adc1 adc2 adc3 adc4 hostname \
-		serialnum release imei simstatus ccid registration nettype baseid packtype"
+		serialnum release imei simstatus ccid registration nettype baseid packtype \
+		imsi operator voltage temp uptime currentwan wanip"
 }
 
 get_adc(){
@@ -53,6 +54,9 @@ case "$1" in
 	"ccid")
 		simman2_cli -d /dev/ttyGSM1 --get-ccid
 	;;
+	"imsi")
+		simman2_cli -d /dev/ttyGSM1 --get-imsi
+	;;
 	"signal")
 		simman2_cli -d /dev/ttyGSM1 --get-rssi
 	;;
@@ -67,6 +71,43 @@ case "$1" in
 	;;
 	"packtype")
 		simman2_cli -d /dev/ttyGSM1 --get-data-type
+	;;
+	"operator")
+		simman2_cli -d /dev/ttyGSM1 --get-plmn
+	;;
+	"voltage")
+		ubus call info info | grep voltage | awk -F '"' '{print $4}'
+	;;
+	"temp")
+		ubus call info info | grep temp | awk -F '"' '{print $4}' | awk -F ' ' '{print $1}'
+	;;
+	"uptime")
+		cat /proc/uptime | awk -F ' ' '{print $1}'
+	;;
+	"currentwan")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}'
+		else
+			iface=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+			uci show network | grep $iface | awk -F '.' '{print $2}'
+		fi
+	;;
+	"wanip")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			wan=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+		else
+			iface=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+			wan=$(uci show network | grep $iface | awk -F '.' '{print $2}')
+		fi
+		if [[ -n "$wan" ]]; then
+			ifstatus $wan |  jsonfilter -e '@["ipv4-address"][0].address'
+		else
+			echo "N/A"
+		fi
 	;;
 	*)
 		unsupported_request
