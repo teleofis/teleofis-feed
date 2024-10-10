@@ -10,6 +10,11 @@ fi
 
 if [[ "$(uci -q get report.@report[0].system)" -eq "1" ]]; then
 	logread &> /tmp/report/logread.txt
+	log_file=$(uci -q get system.@system[0].log_file)
+	if [[ -n "$log_file" ]]; then
+		cp ${log_file} /tmp/report/logfile.txt
+		cp ${log_file}.old /tmp/report/logfile.old.txt
+	fi
 fi
 
 if [[ "$(uci -q get report.@report[0].network)" -eq "1" ]]; then
