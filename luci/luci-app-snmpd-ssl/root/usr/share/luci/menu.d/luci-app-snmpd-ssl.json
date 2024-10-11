@@ -1,0 +1,12 @@
+{
+        "admin/services/snmpd-ssl": {
+                "title": "SNMP",
+                "action": {
+                        "type": "view",
+                        "path": "snmpd-ssl/snmpd-ssl"
+                },
+                "depends": {
+                        "acl": [ "luci-app-snmpd-ssl" ]
+                }
+        }
+}
