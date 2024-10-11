@@ -5,6 +5,6 @@ if [ "${ACTION}" = "released" ]; then
 fi
 
 if [ "${ACTION}" = "pressed" ]; then
-	event-handler
+	event-handler int
 	#logger "gd3x: new interrupt"
 fi

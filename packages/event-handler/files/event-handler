@@ -4,59 +4,68 @@ USB="$(uci -q get event-handler.@event-handler[0].usb_gpio)"
 HEAT="$(uci -q get event-handler.@event-handler[0].heat_gpio)"
 WD="$(uci -q get event-handler.@event-handler[0].wd_gpio)"
 LOG=/etc/event_log
+int=$1
 
-DATE=$(date)
-INTS_MASK=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/int_sum)
-touch $LOG
+while true; do
+	touch $LOG
+	DATE=$(date)
+	INTS_MASK=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/int_sum)
 
-# poe out power error int
-if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
-	VALUE=$(cat /sys/class/gpio/gpio$POE/value)
-	if [[ "$VALUE" == "1" ]]; then
-		echo "$DATE: poe: error" >> $LOG
-	else
-		echo "$DATE: poe: error clear" >> $LOG
+	# poe out power error int
+	if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
+		VALUE=$(cat /sys/class/gpio/gpio$POE/value)
+		if [[ "$VALUE" == "1" ]]; then
+			echo "$DATE: ${int:+$int: }poe: error" >> $LOG
+		else
+			echo "$DATE: ${int:+$int: }poe: error clear" >> $LOG
+		fi
 	fi
-fi
 
-# usb power error int
-if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
-	VALUE=$(cat /sys/class/gpio/gpio$USB/value)
-	if [[ "$VALUE" == "1" ]]; then
-		echo "$DATE: usb: error" >> $LOG
-	else
-		echo "$DATE: usb: error clear" >> $LOG
+	# usb power error int
+	if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
+		VALUE=$(cat /sys/class/gpio/gpio$USB/value)
+		if [[ "$VALUE" == "1" ]]; then
+			echo "$DATE: ${int:+$int: }usb: error" >> $LOG
+		else
+			echo "$DATE: ${int:+$int: }usb: error clear" >> $LOG
+		fi
 	fi
-fi
 
-# heat int
-if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
-	VALUE=$(cat /sys/class/gpio/gpio$HEAT/value)
-	if [[ "$VALUE" == "1" ]]; then
-		echo "$DATE: heat: started" >> $LOG
-	else
-		echo "$DATE: heat: ended" >> $LOG
+	# heat int
+	if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
+		VALUE=$(cat /sys/class/gpio/gpio$HEAT/value)
+		if [[ "$VALUE" == "1" ]]; then
+			echo "$DATE: ${int:+$int: }heat: started" >> $LOG
+		else
+			echo "$DATE: ${int:+$int: }heat: ended" >> $LOG
+		fi
 	fi
-fi
 
-# wd toggle int
-if [[ "$(echo $((INTS_MASK & 8)))" == "8" ]]; then
-	VALUE=$(cat /sys/class/gpio/gpio$WD/value)
-fi
-
-# voltage threshold int
-if [[ "$(echo $((INTS_MASK & 16)))" == "16" ]]; then
-	input_voltage="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)"
-	voltage_threshold="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/voltage_threshold)"
-	poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
-	if [[ "$input_voltage" -lt "$voltage_threshold" ]]; then
-		echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
-		echo "$DATE: input voltage: $input_voltage mV, disable poe out" >> $LOG
+	# wd toggle int
+	if [[ "$(echo $((INTS_MASK & 8)))" == "8" ]]; then
+		VALUE=$(cat /sys/class/gpio/gpio$WD/value)
 	fi
-fi
 
-if [[ "$(wc -l < $LOG)" -ge "100" ]]; then
-	mv $LOG $LOG.old
-fi
+	# voltage threshold int
+	if [[ "$(echo $((INTS_MASK & 16)))" == "16" ]]; then
+		input_voltage="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)"
+		voltage_threshold="$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/voltage_threshold)"
+		poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
+		if [[ "$input_voltage" -lt "$voltage_threshold" ]]; then
+			echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
+			echo "$DATE: ${int:+$int: }input voltage: $input_voltage mV, disable poe out" >> $LOG
+		fi
+	fi
+
+	if [[ "$(wc -l < $LOG)" -ge "100" ]]; then
+		mv $LOG $LOG.old
+	fi
+
+	if [[ -n "$int" ]]; then
+		break
+	fi
+
+	sleep 1
+done
 
 exit 0
