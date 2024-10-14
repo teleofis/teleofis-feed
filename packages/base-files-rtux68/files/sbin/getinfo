@@ -88,23 +88,36 @@ case "$1" in
 		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
 		if [[ -n "$mwan3_enabled" ]]; then
 			policy=$(uci get mwan3.default_rule.use_policy)
-			mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}'
+			iface=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
 		else
-			iface=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
-			uci show network | grep $iface | awk -F '.' '{print $2}'
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+		fi
+		if [[ -n "$wan" ]]; then
+			echo $wan
+		else
+			echo "N/A"
 		fi
 	;;
 	"wanip")
 		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
 		if [[ -n "$mwan3_enabled" ]]; then
 			policy=$(uci get mwan3.default_rule.use_policy)
-			wan=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			iface=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
 		else
-			iface=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
-			wan=$(uci show network | grep $iface | awk -F '.' '{print $2}')
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
 		fi
 		if [[ -n "$wan" ]]; then
-			ifstatus $wan |  jsonfilter -e '@["ipv4-address"][0].address'
+			ip -f inet addr show $wan | awk '/inet / {print $2}' | cut -d "/" -f 1
 		else
 			echo "N/A"
 		fi
