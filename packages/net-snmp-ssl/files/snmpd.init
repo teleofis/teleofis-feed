@@ -1,6 +1,6 @@
 #!/bin/sh /etc/rc.common
 # Copyright (C) 2008 OpenWrt.org
-START=50
+START=99
 
 USE_PROCD=1
 PROG="/usr/sbin/snmpd"
@@ -201,14 +201,14 @@ snmpd_extend_add() {
 }
 
 snmpd_disk_add() {
-        local cfg="$1"
-        local disk='disk'
+	local cfg="$1"
+	local disk='disk'
 
-        config_get partition "$cfg" partition
-        [ -n "$partition" ] || return 0
-        config_get size "$cfg" size
-        [ -n "$size" ] || return 0
-        echo "$disk $partition $size" >> $CONFIGFILE
+	config_get partition "$cfg" partition
+	[ -n "$partition" ] || return 0
+	config_get size "$cfg" size
+	[ -n "$size" ] || return 0
+	echo "$disk $partition $size" >> $CONFIGFILE
 }
 
 snmpd_engineid_add() {
@@ -324,7 +324,6 @@ snmpd_v3_add() {
 }
 
 start_service() {
-	kill $(pidof snmpd) &>/dev/null
 	[ -f "$CONFIGFILE" ] && rm -f "$CONFIGFILE"
 	[ -f "$CONFIGFILE2" ] && sed -i '/usmUser/d' "$CONFIGFILE2"
 
@@ -391,10 +390,14 @@ start_service() {
 }
 
 stop_service() {
-	kill $(pidof snmpd) &>/dev/null
 	[ -f "$CONFIGFILE" ] || return
 	rm -f "$CONFIGFILE"
 	procd_set_config_changed firewall
+}
+
+reload_service() {
+	stop
+	start
 }
 
 service_triggers(){

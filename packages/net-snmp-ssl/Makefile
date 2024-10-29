@@ -260,10 +260,6 @@ define Package/snmp-utils-ssl/install
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/snmp{get,set,status,test,trap,walk} $(1)/usr/bin/
 endef
 
-define Package/snmpd-ssl/conffiles
-/etc/config/snmpd
-endef
-
 define Package/snmpd-ssl/install
 	$(INSTALL_DIR) $(1)/etc/snmp
 	$(LN) /var/run/snmpd.conf $(1)/etc/snmp/
