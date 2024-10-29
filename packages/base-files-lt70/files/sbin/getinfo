@@ -1,13 +1,117 @@
 #!/bin/sh
 
+unsupported_request(){
+	echo "Unsupported request: \
+adc0 adc1 adc2 adc3 adc4 adc5 adc6 adc7 adc8 hostname \
+serialnum release imei simstatus ccid registration nettype baseid packtype \
+imsi operator voltage temp uptime currentwan wanip"
+}
+
 case "$1" in
 	"adc"*)
 		ADC=${1:3}
 		ADC_RAW=$(cat /sys/bus/iio/devices/iio\:device0/in_voltage"$ADC"_raw)
 		echo $ADC_RAW
 	;;
+	"hostname")
+		uci get system.@system[0].hostname
+	;;
+	"serialnum")
+		echo "n/a"
+	;;
+	"release")
+		. /etc/openwrt_release
+		echo $DISTRIB_DESCRIPTION
+	;;
+	"imei")
+		simman2_cli -d /dev/ttyGSM1 --get-imei
+	;;
+	"simstatus")
+		simman2_cli -s core
+	;;
+	"ccid")
+		simman2_cli -d /dev/ttyGSM1 --get-ccid
+	;;
+	"imsi")
+		simman2_cli -d /dev/ttyGSM1 --get-imsi
+	;;
+	"signal")
+		simman2_cli -d /dev/ttyGSM1 --get-rssi
+	;;
+	"registration")
+		simman2_cli -d /dev/ttyGSM1 --get-data-status
+	;;
+	"nettype")
+		simman2_cli -d /dev/ttyGSM1 --get-net-type
+	;;
+	"baseid")
+		simman2_cli -d /dev/ttyGSM1 --get-bsid
+	;;
+	"packtype")
+		simman2_cli -d /dev/ttyGSM1 --get-data-type
+	;;
+	"operator")
+		simman2_cli -d /dev/ttyGSM1 --get-plmn
+	;;
+	"voltage")
+		input_voltage=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
+		if [[ "$?" -ne "0" ]]; then
+			input_voltage="n/a"
+		else
+			input_voltage=$((input_voltage + 800))
+		fi
+		echo $input_voltage
+	;;
+	"temp")
+		temp=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
+		if [[ "$?" -ne "0" ]]; then
+			temp="n/a"
+		fi
+		echo $temp
+	;;
+	"uptime")
+		cat /proc/uptime | awk -F ' ' '{print $1}'
+	;;
+	"currentwan")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			iface=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
+		else
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+		fi
+		if [[ -n "$wan" ]]; then
+			echo $wan
+		else
+			echo "N/A"
+		fi
+	;;
+	"wanip")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			iface=$(mwan3 policies | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
+		else
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+		fi
+		if [[ -n "$wan" ]]; then
+			ip -f inet addr show $wan | awk '/inet / {print $2}' | cut -d "/" -f 1
+		else
+			echo "N/A"
+		fi
+	;;
 	*)
-		echo "Unsupported request:  adc0 adc1 adc2 adc3 adc4 adc5 adc6 adc7 adc8"
+		unsupported_request
 	;;
 esac
 
