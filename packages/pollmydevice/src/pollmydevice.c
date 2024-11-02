@@ -1975,8 +1975,8 @@ int FormAuthAnswer(char *dataBuffer, long long int clientID)
 	
 	dataBuffer[67] = 0x01;	//Аворизация по основному каналу
 
-    crc = Crc16Block((uint8_t *)&dataBuffer[1], 68);
-    len_out = 69;
+    crc = Crc16Block((uint8_t *)&dataBuffer[1], 67);
+    len_out = 68;
 
     for(i = 0; i < 2; i++)
     {
