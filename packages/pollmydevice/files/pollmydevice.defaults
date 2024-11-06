@@ -6,14 +6,6 @@ json_get_var MODEL model
 case "$MODEL" in
 	"TELEOFIS LT70")
 		uci set pollmydevice.0.rs485_mode='1'
-		uci set pollmydevice.2='interface'
-		uci set pollmydevice.2.mode='disabled'
-		uci set pollmydevice.2.desc='A2B2'
-		uci set pollmydevice.2.devicename='/dev/com2'
-		uci set pollmydevice.2.baudrate='9600'
-		uci set pollmydevice.2.bytesize='8'
-		uci set pollmydevice.2.rs485_mode='1'
-		uci set pollmydevice.2.open_in_firewall='1'
 		uci commit pollmydevice
 	;;
 	"TELEOFIS LT70U")
