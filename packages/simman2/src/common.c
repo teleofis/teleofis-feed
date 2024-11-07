@@ -684,6 +684,14 @@ int uci_read_configuration(struct settings_entry *set, char *config)
 		} else
 			set->sim[i].apn = p;
 
+		sprintf(path,"simman2.%s.sim%d_auth",config,i);
+		if ((p = uci_get_value(path)) == NULL)
+		{
+			//fprintf(stderr,"Error reading sim%d_auth\n",i);
+			set->sim[i].auth = NULL;
+		} else
+			set->sim[i].auth = p;
+
 		sprintf(path,"simman2.%s.sim%d_username",config,i);
 		if ((p = uci_get_value(path)) == NULL)
 		{
@@ -1002,6 +1010,9 @@ int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_
 	sprintf(buf2,"simman2.%s.sim%d_pincode",settings->name,sim_n);
 	uci_set_value(buf,"pincode",uci_get_value(buf2));
 
+	sprintf(buf2,"simman2.%s.sim%d_auth",settings->name,sim_n);
+	uci_set_value(buf,"auth",uci_get_value(buf2));
+
 	sprintf(buf2,"simman2.%s.sim%d_username",settings->name,sim_n);
 	uci_set_value(buf,"username",uci_get_value(buf2));
 
@@ -1033,7 +1044,7 @@ int switch_sim(struct settings_entry *settings, struct modems_ops *modem, uint8_
 	usleep(500);
 	modem->set_pin(settings,settings->sim[sim_n].pin);
 	modem->set_mode(settings,settings->sim[sim_n].mode);
-	modem->set_auth(settings,settings->sim[sim_n].user,settings->sim[sim_n].pass);
+	modem->set_auth(settings,settings->sim[sim_n].auth,settings->sim[sim_n].user,settings->sim[sim_n].pass);
 	modem->set_apn(settings,settings->sim[sim_n].apn);
 	
 	//fixme	

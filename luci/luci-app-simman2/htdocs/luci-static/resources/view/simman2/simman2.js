@@ -130,12 +130,22 @@ return view.extend({
 		o = s.taboption('sim0', form.Value, 'sim0_pincode', _('Pincode'));
 		o.modalonly = true;
 
+		o = s.taboption('sim0', form.ListValue, 'sim0_auth', _('Authentication Type'));
+		o.default = 'none';
+		o.value('both','PAP/CHAP');
+		o.value('pap','PAP');
+		o.value('chap','CHAP');
+		o.value('none','NONE');
+		o.modalonly = true;
+
 		o = s.taboption('sim0', form.Value, 'sim0_username', _('User name'));
 		o.modalonly = true;
+		o.depends({sim0_auth: 'none', '!reverse': true});
 
 		o = s.taboption('sim0', form.Value, 'sim0_password', _('Password'));
 		o.modalonly = true;
 		o.password = true;
+		o.depends({sim0_auth: 'none', '!reverse': true});
 
 		o = s.taboption('sim0', form.DynamicList, 'sim0_testip', _('IP address of remote servers'));
 		o.datatype = 'host';
@@ -163,12 +173,22 @@ return view.extend({
 		o = s.taboption('sim1', form.Value, 'sim1_pincode', _('Pincode'));
 		o.modalonly = true;
 
+		o = s.taboption('sim1', form.ListValue, 'sim1_auth', _('Authentication Type'));
+		o.default = 'none';
+		o.value('both','PAP/CHAP');
+		o.value('pap','PAP');
+		o.value('chap','CHAP');
+		o.value('none','NONE');
+		o.modalonly = true;
+
 		o = s.taboption('sim1', form.Value, 'sim1_username', _('User name'));
 		o.modalonly = true;
+		o.depends({sim1_auth: 'none', '!reverse': true});
 
 		o = s.taboption('sim1', form.Value, 'sim1_password', _('Password'));
 		o.modalonly = true;
 		o.password = true;
+		o.depends({sim1_auth: 'none', '!reverse': true});
 
 		o = s.taboption('sim1', form.DynamicList, 'sim1_testip', _('IP address of remote servers'));
 		o.datatype = 'host';

@@ -407,16 +407,36 @@ int a7600_set_pin(struct settings_entry *settings,char *pin){
 	return 0;
 }
 
-int a7600_set_auth(struct settings_entry *settings,char *user,char *pass){
+int a7600_set_auth(struct settings_entry *settings,char *auth, char *user,char *pass){
 	char receive[256]={0},buf[256]={0};
+	uint8_t auth_num = 2;
 	
 	if(user != NULL && pass != NULL){
+		switch(auth[0]){
+		case 'n': //none
+			auth_num = 0;
+			break;
+		case 'p': //pap
+			auth_num = 1;
+			break;
+		case 'c': //chap
+			auth_num = 2;
+			break;
+		case 'b': //both
+			auth_num = 3;
+			break;
+		default:
+			auth_num = 2;
+			break;
+		}
 		if(modem_common_send_at(settings->atdevice)!=0){
 			return -1;
 		}
-		sprintf(buf,"\rAT+CGAUTH=1,2,%s,%s\r",pass,user);
+		sprintf(buf,"\rAT+CGAUTH=1,%d,\"%s\",\"%s\"\r",auth_num,user,pass);
 		if(modem_send_command(receive,settings->atdevice,buf,"OK")!=0)
 			return -1;
+	} else {
+		modem_send_command(receive,settings->atdevice,"\rAT+CGAUTH=1,0\r","OK");
 	}
 	return 0;
 }

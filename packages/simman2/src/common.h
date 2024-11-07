@@ -51,6 +51,7 @@ typedef struct sim_s
 	uint8_t init;
 	uint8_t prio;
 	uint8_t *pin;
+	uint8_t *auth;
 	uint8_t *user;
 	uint8_t *pass;
 	uint8_t *apn;
@@ -104,7 +105,7 @@ struct modems_ops{
 	int (*set_mode)(struct settings_entry *, char *);
 	int (*set_apn)(struct settings_entry *, char *);
 	int (*set_pin)(struct settings_entry *, char *);
-	int (*set_auth)(struct settings_entry *, char *, char *);
+	int (*set_auth)(struct settings_entry *, char *, char *, char *);
 	int (*imsi)(char *,char *);
 };
 
@@ -130,7 +131,7 @@ int modem_common_sim_pullup(struct settings_entry *settings);
 int modem_common_set_mode(struct settings_entry *settings, char *mode);
 int modem_common_set_apn(struct settings_entry *settings, char *apn);
 int modem_common_set_pin(struct settings_entry *settings, char *pin);
-int modem_common_set_auth(struct settings_entry *settings, char *user, char *pass);
+int modem_common_set_auth(struct settings_entry *settings, char *auth, char *user, char *pass);
 
 int modem_send_command(char *receive, char *device, char *at_command, char *wait_output);
 int common_awk_f(char *source_str, char *delim, uint8_t num);

@@ -267,6 +267,6 @@ int modem_common_set_pin(struct settings_entry *settings, char *pin){
 	return 0;
 }
 
-int modem_common_set_auth(struct settings_entry *settings, char *user, char *pass){
+int modem_common_set_auth(struct settings_entry *settings, char *auth, char *user, char *pass){
 	return 0;
 }
