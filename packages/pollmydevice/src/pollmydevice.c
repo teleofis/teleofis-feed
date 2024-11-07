@@ -1881,8 +1881,8 @@ device_config_t GetFullDeviceConfig(int deviceID)
             deviceConfig.clientID = strtoll(serialNum, NULL, 10);
             LOG("S/N dev %d = %lld\n", deviceID, deviceConfig.clientID);
         }
+        fclose(pFuseFile);
     }
-    fclose(pFuseFile);
     if (serialNum)
         free(serialNum);
 
