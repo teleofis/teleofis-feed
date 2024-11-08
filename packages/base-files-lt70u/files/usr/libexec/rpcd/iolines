@@ -1,0 +1,58 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+case "$1" in
+	list)
+		echo '{' 
+		echo '"raw": {"adc":"str"},'
+		echo '"voltage": {"adc":"str"}'
+		echo '}'
+	;;
+	call)
+		case "$2" in
+			raw)
+				read input;
+				json_load "$input"
+				json_get_var ADC adc
+				if [[ "$ADC" == "all" ]]; then
+					echo '{'
+					for num in 0 1 2 3 4 5 6 7
+					do
+						value=$(getinfo adc$num)
+						echo "\"adc$num\": \"$value\","
+					done
+					value=$(getinfo adc8)
+					echo "\"adc8\": \"$value\""
+					echo '}'
+				else
+					adc1=$(getinfo $ADC)
+					echo '{'
+					echo "\"value\": \"$adc1\""
+					echo '}'
+				fi
+			;;
+			voltage)
+				read input;
+				json_load "$input"
+				json_get_var ADC adc
+				if [[ "$ADC" == "all" ]]; then
+					echo '{'
+					for num in 0 1 2 3 4 5 6 7
+					do
+						value=$(getinfo adc$num)
+						echo "\"voltage$num\": \"$value\","
+					done
+					value=$(getinfo adc8)
+					echo "\"voltage8\": \"$value\""
+					echo '}'
+				else
+					adc1=$(getinfo $ADC)
+					echo '{'
+					echo "\"value\": \"$adc1\""
+					echo '}'
+				fi
+			;;
+		esac
+	;;
+esac

@@ -1,0 +1,33 @@
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config device
+	option name 'lan1'
+
+config device
+	option name 'lan2'
+
+config device
+	option name 'lan3'
+
+config device
+	option name 'lan4'
+
+config interface 'wan'
+	option device 'lan4'
+	option proto 'static'
+	list ipaddr '192.168.88.11/24'
+	list ipaddr '192.168.0.78/24'
+	list ipaddr '192.168.16.11/24'
+
+config device
+	option name 'wan'
+
+config interface 'lan'
+	option device 'wan'
+	option proto 'static'
+	option ipaddr '192.168.77.1'
+	option netmask '255.255.255.0'

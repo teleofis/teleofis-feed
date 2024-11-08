@@ -1,0 +1,11 @@
+#!/bin/sh
+
+uci set iolines.@io[3].mode='mode3'
+uci set iolines.@io[3].enabled='1'
+uci set powersupply.system.ext_power='1'
+uci commit iolines powersupply
+
+/etc/init.d/powersupply restart
+/etc/init.d/iolines restart
+
+exit 0

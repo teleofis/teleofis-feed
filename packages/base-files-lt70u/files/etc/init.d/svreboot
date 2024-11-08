@@ -1,0 +1,13 @@
+#!/bin/sh /etc/rc.common
+
+START=10
+STOP=90
+USE_PROCD=1
+
+boot(){
+	echo 0 > /sys/class/i2c-dev/i2c-0/device/0-0011/system_reboot
+}
+
+shutdown() {
+	echo 1 > /sys/class/i2c-dev/i2c-0/device/0-0011/system_reboot
+}

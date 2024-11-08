@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2017 teleofis
+
+START=12
+STOP=84
+
+start()
+{
+	RESET_FLAG=$(fw_printenv -n factory_reset)
+	if [[ "$RESET_FLAG" = "yes" ]]; then
+		firstboot -y
+		sync
+		fw_setenv factory_reset
+		reboot
+	fi
+	echo 25000000 > /sys/kernel/debug/mmc0/clock
+
+	ln -s /dev/ttyS1 /dev/com0
+	ln -s /dev/ttyS0 /dev/com1
+	ln -s /dev/ttyS2 /dev/com2
+}
