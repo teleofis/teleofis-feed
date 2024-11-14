@@ -258,9 +258,10 @@ char * wait_for(int fd, char *text, char *receive) {
 	while(now<=timeout) {
 		time(&now);
 		c=get_one_byte(fd);
-		if(c!= -1 || b>=255) {
+		if(c!= -1 || b>=254) {
 				//fixme: size of receive > b
 				receive[b++]=c;
+				receive[b+1]='\0';
 				if(strstr(receive,text)!=NULL) break;
 				if(strstr(receive,"ERROR")!=NULL) break;
 		}
