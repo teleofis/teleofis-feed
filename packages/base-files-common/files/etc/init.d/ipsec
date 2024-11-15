@@ -288,7 +288,12 @@ config_conn() {
 		[ "$remote_sourceip" != "" ] && ipsec_xappend "  rightsourceip=$remote_sourceip"
 		[ "$remote_subnet" != "" ] && ipsec_xappend "  rightsubnet=${remote_subnet//\ /,}"
 		for subnet in $remote_subnet; do
-			firewall_xappend "iptables -t nat -A postrouting_rule -d $subnet -j ACCEPT"
+			command -v nft &>/dev/null
+			if [[ "$?" -eq "0" ]]; then
+				firewall_xappend "nft insert rule inet fw4 srcnat ip daddr $subnet counter accept"
+			else
+				firewall_xappend "iptables -t nat -A postrouting_rule -d $subnet -j ACCEPT"
+			fi
 		done
 		ipsec_xappend "  auto=$mode"
 	else
