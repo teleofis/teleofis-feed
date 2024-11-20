@@ -432,7 +432,8 @@ int a7600_set_auth(struct settings_entry *settings,char *auth, char *user,char *
 		if(modem_common_send_at(settings->atdevice)!=0){
 			return -1;
 		}
-		sprintf(buf,"\rAT+CGAUTH=1,%d,\"%s\",\"%s\"\r",auth_num,user,pass);
+		// looks like the order of "user" and "pass" does not match with datasheet 
+		sprintf(buf,"\rAT+CGAUTH=1,%d,\"%s\",\"%s\"\r",auth_num,pass,user);
 		if(modem_send_command(receive,settings->atdevice,buf,"OK")!=0)
 			return -1;
 	} else {
