@@ -1,0 +1,10 @@
+#!/bin/sh
+
+/sbin/jffs2reset $@
+result=$?
+
+sleep 1
+sync
+sleep 1
+
+exit $result

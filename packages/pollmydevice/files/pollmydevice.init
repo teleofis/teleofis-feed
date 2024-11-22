@@ -25,18 +25,19 @@ check_client_id()
 		json_get_var MODEL model
 		case "$MODEL" in
 			"TELEOFIS LT70" | "TELEOFIS LT70U")
-				CLIENT_ID=$(simman2_cli -d /dev/ttyGSM1 -I)
-				CLIENT_ID=${CLIENT_ID:1}
-				CLIENT_ID="$CLIENT_ID$INTERFACE"
-				echo $CLIENT_ID > /etc/pollmydevice/client_id$INTERFACE
-				if [[ "$(fw_printenv -n rs485_count)" -eq "2" ]]; then
-					if [ -e /etc/pollmydevice/exp_port ]; then
-						/etc/pollmydevice/exp_port
-						rm /etc/pollmydevice/exp_port
-						uci set pollmydevice.2.rs485_mode='1'
-						uci commit pollmydevice
-					fi
+				SERIALNUM=$(getinfo serialnum)
+				if [[ "$SERIALNUM" != "n/a" ]]; then
+					SERIALNUM="0x$SERIALNUM"
+					CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
+					if [[ "$(fw_printenv -n rs485_count)" -eq "2" ]]; then
+						if [ -e /etc/pollmydevice/exp_port ]; then
+							/etc/pollmydevice/exp_port
+							rm /etc/pollmydevice/exp_port
+							uci set pollmydevice.2.rs485_mode='1'
+							uci commit pollmydevice
+						fi
 
+					fi
 				fi
 			;;
 			"TELEOFIS RTUx68")
@@ -52,7 +53,7 @@ check_client_id()
 				fi
 			;;
 		esac
-		echo $CLIENT_ID > /tmp/pollmydevice/client_id$INTERFACE
+		[[ -n "$CLIENT_ID" ]] && echo $CLIENT_ID > /tmp/pollmydevice/client_id$INTERFACE
 	fi
 }
 

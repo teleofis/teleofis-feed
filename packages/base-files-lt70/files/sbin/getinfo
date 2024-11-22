@@ -17,7 +17,14 @@ case "$1" in
 		uci get system.@system[0].hostname
 	;;
 	"serialnum")
-		echo "n/a"
+		sn=$(strings /dev/mtd2 | grep lanmac)
+		if [[ -n "$sn" ]]; then
+			sn=$(echo $sn | awk -F '=' '{print $2}')
+			sn=${sn//:}
+			echo ${sn:4}
+		else
+			echo "n/a"
+		fi
 	;;
 	"release")
 		. /etc/openwrt_release
