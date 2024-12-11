@@ -15,9 +15,9 @@ while true; do
 	if [[ "$(echo $((INTS_MASK & 1)))" == "1" ]]; then
 		VALUE=$(cat /sys/class/gpio/gpio$POE/value)
 		if [[ "$VALUE" == "1" ]]; then
-			echo "$DATE: ${int:+$int: }poe: error" >> $LOG
+			echo "$DATE: ${int:+$int: }poe: Warning! The maximum current limit on the PoE-OUT output has been exceeded." >> $LOG
 		else
-			echo "$DATE: ${int:+$int: }poe: error clear" >> $LOG
+			echo "$DATE: ${int:+$int: }poe: The PoE-OUT output current has been restored to normal levels." >> $LOG
 		fi
 	fi
 
@@ -25,9 +25,9 @@ while true; do
 	if [[ "$(echo $((INTS_MASK & 2)))" == "2" ]]; then
 		VALUE=$(cat /sys/class/gpio/gpio$USB/value)
 		if [[ "$VALUE" == "1" ]]; then
-			echo "$DATE: ${int:+$int: }usb: error" >> $LOG
+			echo "$DATE: ${int:+$int: }usb: Warning! The maximum current limit for the USB has been exceeded." >> $LOG
 		else
-			echo "$DATE: ${int:+$int: }usb: error clear" >> $LOG
+			echo "$DATE: ${int:+$int: }usb: The USB current has been restored to normal levels." >> $LOG
 		fi
 	fi
 
@@ -35,9 +35,9 @@ while true; do
 	if [[ "$(echo $((INTS_MASK & 4)))" == "4" ]]; then
 		VALUE=$(cat /sys/class/gpio/gpio$HEAT/value)
 		if [[ "$VALUE" == "1" ]]; then
-			echo "$DATE: ${int:+$int: }heat: started" >> $LOG
+			echo "$DATE: ${int:+$int: }heat: The device heating circuit is enabled." >> $LOG
 		else
-			echo "$DATE: ${int:+$int: }heat: ended" >> $LOG
+			echo "$DATE: ${int:+$int: }heat: The device heating circuit is disabled." >> $LOG
 		fi
 	fi
 
@@ -53,7 +53,7 @@ while true; do
 		poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
 		if [[ "$input_voltage" -lt "$voltage_threshold" ]]; then
 			echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
-			echo "$DATE: ${int:+$int: }input voltage: $input_voltage mV, disable poe out" >> $LOG
+			echo "$DATE: ${int:+$int: }voltage: PoE-OUT power supply is disabled. The input voltage is below the required threshold of 20,000 mV DC. Current voltage: $input_voltage mV." >> $LOG
 		fi
 	fi
 

@@ -29,14 +29,14 @@ check_client_id()
 				if [[ "$SERIALNUM" != "n/a" ]]; then
 					SERIALNUM="0x$SERIALNUM"
 					CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
-					if [[ "$(fw_printenv -n rs485_count)" -eq "2" ]]; then
-						if [ -e /etc/pollmydevice/exp_port ]; then
-							/etc/pollmydevice/exp_port
-							rm /etc/pollmydevice/exp_port
-							uci set pollmydevice.2.rs485_mode='1'
-							uci commit pollmydevice
-						fi
-
+				fi
+				rs485_count=$(fw_printenv -n rs485_count 2>/dev/null)
+				if [[ "$rs485_count" == "2" ]]; then
+					if [ -e /etc/pollmydevice/exp_port ]; then
+						/etc/pollmydevice/exp_port
+						rm /etc/pollmydevice/exp_port
+						uci set pollmydevice.2.rs485_mode='1'
+						uci commit pollmydevice
 					fi
 				fi
 			;;

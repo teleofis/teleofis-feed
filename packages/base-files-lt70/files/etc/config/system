@@ -43,5 +43,6 @@ config led
 	option sysfs 'optional:wlan'
 	option trigger 'netdev'
 	option dev 'wlan0'
+	list mode 'link'
 	list mode 'tx'
 	list mode 'rx'
