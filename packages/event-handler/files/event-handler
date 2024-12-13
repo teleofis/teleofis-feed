@@ -53,7 +53,7 @@ while true; do
 		poe_out_power_gpio="$(uci -q get powersupply.system.poe_out_power_gpio)"
 		if [[ "$input_voltage" -lt "$voltage_threshold" ]]; then
 			echo 0 > /sys/class/gpio/gpio$poe_out_power_gpio/value
-			echo "$DATE: ${int:+$int: }voltage: PoE-OUT power supply is disabled. The input voltage is below the required threshold of 20,000 mV DC. Current voltage: $input_voltage mV." >> $LOG
+			echo "$DATE: ${int:+$int: }voltage: PoE-OUT power supply is disabled. The input voltage is below the required threshold of $voltage_threshold mV DC. Current voltage: $input_voltage mV." >> $LOG
 		fi
 	fi
 
