@@ -17,7 +17,7 @@ while true; do
 		if [[ "$VALUE" == "1" ]]; then
 			echo "$DATE: ${int:+$int: }poe: Warning! The maximum current limit on the PoE-OUT output has been exceeded." >> $LOG
 		else
-			echo "$DATE: ${int:+$int: }poe: The PoE-OUT output current has been restored to normal levels." >> $LOG
+			echo "$DATE: ${int:+$int: }poe: The PoE-OUT output current has been restored to normal values after exceeding the maximum thresholds." >> $LOG
 		fi
 	fi
 
@@ -27,7 +27,7 @@ while true; do
 		if [[ "$VALUE" == "1" ]]; then
 			echo "$DATE: ${int:+$int: }usb: Warning! The maximum current limit for the USB has been exceeded." >> $LOG
 		else
-			echo "$DATE: ${int:+$int: }usb: The USB current has been restored to normal levels." >> $LOG
+			echo "$DATE: ${int:+$int: }usb: The USB current has been restored to normal values after exceeding the maximum threshold." >> $LOG
 		fi
 	fi
 
