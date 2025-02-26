@@ -412,6 +412,9 @@ int a7600_set_auth(struct settings_entry *settings,char *auth, char *user,char *
 	uint8_t auth_num = 2;
 	
 	if(user != NULL && pass != NULL){
+		if(auth == NULL)
+			auth = "b";
+
 		switch(auth[0]){
 		case 'n': //none
 			auth_num = 0;
