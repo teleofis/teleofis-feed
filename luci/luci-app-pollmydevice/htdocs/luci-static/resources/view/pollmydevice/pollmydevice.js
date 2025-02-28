@@ -85,9 +85,9 @@ return view.extend({
 
 		o = s.taboption('general', form.ListValue, 'mode', _('Mode'));
 		o.default = 'disabled';
-		o.value(_('disabled'));
-		o.value(_('server'));
-		o.value(_('client'));
+		o.value('disabled',_('disabled'));
+		o.value('server',_('server'));
+		o.value('client',_('client'));
 
 		o = s.taboption('general', form.Flag, 'quiet',_('Disable log messages'));
 		o.default = 0;
