@@ -11,7 +11,11 @@ case "$1" in
 	"adc"*)
 		ADC=${1:3}
 		ADC_RAW=$(cat /sys/bus/iio/devices/iio\:device0/in_voltage"$ADC"_raw)
-		echo $ADC_RAW
+		if [[ "$ADC_RAW" -eq "-5" ]]; then
+			echo ""
+		else
+			echo $ADC_RAW
+		fi
 	;;
 	"hostname")
 		uci get system.@system[0].hostname
