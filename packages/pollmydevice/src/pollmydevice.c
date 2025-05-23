@@ -396,9 +396,9 @@ void *ServerThreadFunc(void *args)
         rs485conf.delay_rts_after_send = 0;
 
         if (ioctl(threadFD->serialPort, TIOCSRS485, &rs485conf) < 0) {
-            LOG("Can not set RS485 mode for %s", deviceConfig.deviceName);
+            LOG("Can not set RS485 mode for %s\n", deviceConfig.deviceName);
         } else {
-            LOG("RS485 mode for %s is successfully set", deviceConfig.deviceName);
+            LOG("RS485 mode for %s is successfully set\n", deviceConfig.deviceName);
         }
     }
 
@@ -603,9 +603,12 @@ void *ServerThreadFunc(void *args)
                 }else{
                     if(deviceConfig.connection_mode == 0)
                     {
-                        send(lastActiveConnSocket, dataBuffer, numOfReadBytes, 0);
+                        result=send(lastActiveConnSocket, dataBuffer, numOfReadBytes, MSG_NOSIGNAL);
+                        if (!result) {
+                            LOG("Error %d while sending data, close connection\n", result);
+                        }
                     } else {
-                        send_all(dataBuffer, numOfReadBytes, 0);
+                        send_all(dataBuffer, numOfReadBytes, MSG_NOSIGNAL);
                     }
                 }
             }else
@@ -1077,7 +1080,10 @@ void *ClientThreadFunc(void *args)
                                 if (!deviceConfig.quiet)
                                     LOG("Autorization request from server\n");
                                 numOfReadBytes = FormAuthAnswer(dataBuffer, deviceConfig.clientID);
-                                send(threadFD->mainSocket, dataBuffer, numOfReadBytes, 0); // maybe add some check???
+                                result=send(threadFD->mainSocket, dataBuffer, numOfReadBytes, MSG_NOSIGNAL); // maybe add some check???
+                                if (!result) {
+                                    LOG("Error %d while sending data\n", result);
+                                }
                                 dataBuffer[numOfReadBytes] = 0;
                             }
                             else if(memcmp(dataBuffer, authAcknow, 28) == 0)
@@ -1264,7 +1270,10 @@ void *ClientThreadFunc(void *args)
                     	threadFD->mb_tcp.sock = threadFD->mainSocket;
                     	SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 0, deviceConfig.connection_mode, deviceConfig.quiet);
                     }else {
-                    	send(threadFD->mainSocket, dataBuffer, numOfReadBytes, 0);
+                    	result=send(threadFD->mainSocket, dataBuffer, numOfReadBytes, MSG_NOSIGNAL);
+                        if (!result) {
+                            LOG("Error %d while sending data\n", result);
+                        }
                     }
                 }
                 //LOG("Serial -> TCP: %d bytes\n", numOfReadBytes);
@@ -1417,11 +1426,11 @@ int SendModbusRTU(struct fdStructType *threadFD,char *pBuf, int len, int ascii_r
 				if (!quiet)
                     LOG("Send modbus ASCII packet len = %d\n", threadFD->state_rtu.offset);
 				threadFD->state_rtu.state = 0;
-
 			}
 			break;
 		}
 	}
+    threadFD->state_rtu.state = 0;
 	return 1;
 }
 char ASCIItoOctet(char byte){
@@ -1514,15 +1523,21 @@ void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uin
                     {
                         if(connection_mode == 0)
                         {
-                            send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+                            result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
+                            if (!result) {
+                                LOG("Error %d while sending data\n", result);
+                            }
                         } else {
-                            send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+                            send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
                         }
                     }
 					else
                     {
 						pTCP->packet[1]++;		//Increment ID packet
-						send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+						result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
+                        if (!result) {
+                            LOG("Error %d while sending data\n", result);
+                        }
 					}
 				if (!quiet)
                     LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
@@ -1575,7 +1590,8 @@ void SendModbusTCP(struct fdStructType *threadFD,char *pBuf, int len, int quiet)
 }
 
 void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet){
-	uint16_t crc1, crc2;
+	int result = 0;
+    uint16_t crc1, crc2;
 	uint8_t low_byte, high_byte;
 	if(threadFD == NULL)return;
 
@@ -1589,6 +1605,13 @@ void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int asci
 	}
     if (!quiet)
 	    LOG("End timeout RTU pack\n");
+
+    if (pTCP->offset<4) {
+        if (!quiet)
+            LOG("Invalid RTU pack, skip\n");
+        return;
+    }
+
 	crc1 = crc16((uint8_t *)&pTCP->packet[MB_TCP_HEADER_SIZE], pTCP->offset-2);
 	high_byte = pTCP->packet[pTCP->offset+MB_TCP_HEADER_SIZE-1];
 	low_byte = pTCP->packet[pTCP->offset+MB_TCP_HEADER_SIZE-2];
@@ -1603,13 +1626,19 @@ void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int asci
         {
             if(connection_mode == 0)
             {
-                send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+                result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
+                if (!result) {
+                    LOG("Error %d while sending data\n", result);
+                }
             } else {
-                send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+                send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
             }
         } else {
 			pTCP->packet[1]++;		//Increment ID packet
-			send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, 0);
+			result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
+            if (!result) {
+                LOG("Error %d while sending data\n", result);
+            }
 		}
 	    if (!quiet)	    
         	LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
@@ -2043,9 +2072,12 @@ uint16_t Crc16Block(uint8_t* block, uint16_t len)
 }
 
 void send_all(const void *dataBuffer, size_t numOfReadBytes, int flags){
-    int descr=-1;
+    int descr=-1, result=0;
     start_request_descr();
     while(get_next_descr(&descr)==0) {
-        send(descr, dataBuffer, numOfReadBytes, flags);
+        result = send(descr, dataBuffer, numOfReadBytes, flags);
+        if (!result) {
+            LOG("Error %d while sending data\n", result);
+        }
     }
 }
