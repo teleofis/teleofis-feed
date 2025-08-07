@@ -25,11 +25,11 @@ msgstr "Unique hostname used by the agent to register with the Zabbix server. Re
 msgid "Server"
 msgstr "Server"
 
-msgid "IP address or hostname of the Zabbix server."
-msgstr "IP address or hostname of the Zabbix server."
+msgid "List of IP addresses (or hostnames) of Zabbix servers allowed to connect to this agent. If 0.0.0.0/0 is specified, the agent will accept connections from any IP address."
+msgstr "List of IP addresses (or hostnames) of Zabbix servers allowed to connect to this agent. If 0.0.0.0/0 is specified, the agent will accept connections from any IP address."
 
-msgid "Incoming connections will only be accepted from hosts specified here."
-msgstr "Incoming connections will only be accepted from hosts specified here."
+msgid "IP address of the local network interfaces on which the Zabbix agent will listen for incoming connections from the server."
+msgstr "IP address of the local network interfaces on which the Zabbix agent will listen for incoming connections from the server."
 
 msgid "ListenPort"
 msgstr "ListenPort"

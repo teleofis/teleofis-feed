@@ -30,11 +30,11 @@ return view.extend({
 			return uci.get('zabbix', section_id, 'hostname') || fs.trimmed('/proc/sys/kernel/hostname')
 		};
 
-		o = s.taboption('passive', form.DynamicList, 'server', _('Server'), _('IP address or hostname of the Zabbix server.'));
+		o = s.taboption('passive', form.DynamicList, 'server', _('Server'), _('List of IP addresses (or hostnames) of Zabbix servers allowed to connect to this agent. If 0.0.0.0/0 is specified, the agent will accept connections from any IP address.'));
 		o.rmempty = false;
 		o.datatype = 'or(cidr,ipmask,host)';
 
-		o = s.taboption('passive', form.Value, 'listen_ip', _('ListenIP'), _('Incoming connections will only be accepted from hosts specified here.'));
+		o = s.taboption('passive', form.Value, 'listen_ip', _('ListenIP'), _('IP address of the local network interfaces on which the Zabbix agent will listen for incoming connections from the server.'));
 		o.datatype = 'host';
 
 		o = s.taboption('passive', form.Value, 'listen_port', _('ListenPort'), _('The agent will listen on this port for connections from the server.'));
