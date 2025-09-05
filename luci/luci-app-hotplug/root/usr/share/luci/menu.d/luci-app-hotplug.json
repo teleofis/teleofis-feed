@@ -1,0 +1,22 @@
+{
+	"admin/services/hotplug": {
+		"title": "Hotplug Rules",
+		"action": {
+			"type": "alias",
+			"path": "admin/services/hotplug/iface"
+		},
+		"depends": {
+			"acl": [ "luci-app-hotplug" ],
+			"uci": { "hotplug": true }
+		}
+	},
+
+	"admin/services/hotplug/iface": {
+		"title": "iface",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "hotplug/iface"
+		}
+	}
+}
