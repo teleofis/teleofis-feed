@@ -71,6 +71,19 @@ int a7600_init(struct settings_entry *settings){
 		reset=1;
 	}
 
+	memset(buf,0,sizeof(buf));
+
+	if(modem_send_command(buf,settings->atdevice,"\rAT+USBNETIP?\r","OK")!=0)
+	{
+		return -1;
+	}
+
+	if(strstr(buf,"+USBNETIP: 1")==NULL)
+	{
+		modem_send_command(buf,settings->atdevice,"\rAT+USBNETIP=1\r","OK");
+		reset=1;
+	}
+
 	if(reset)
 	{
 		modem_send_command(buf,settings->atdevice,"\rAT+UIMHOTSWAPON=1\r","OK");
