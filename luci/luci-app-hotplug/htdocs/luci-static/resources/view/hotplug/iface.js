@@ -12,7 +12,7 @@ return view.extend({
 		m = new form.Map('hotplug', _('Interface Rules'));
 		m.description = _('Running commands when the hotplug trigger occurs. <br/><br/>ACTION - ifdown, ifup, ifup-failed, ifupdate, free, reload, iflink, create <br/>INTERFACE - Name of the logical interface which went up or down (e.g. wan or lan) <br/>DEVICE - Name of the physical device which went up or down (e.g. eth0 or br-lan or pppoe-wan), when applicable <br/><br/>More information about iface events and variables here: <a href=\"https://openwrt.org/docs/guide-user/base-system/hotplug#iface\">hotplug#iface</a>');
 
-		s = m.section(form.GridSection, 'hotplug');
+		s = m.section(form.GridSection, 'iface');
 		s.addremove = true;
 		s.nodescriptions = true;
 

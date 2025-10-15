@@ -1,7 +1,7 @@
 {
 	"admin/services/smscontrol": {
 		"title": "Remote SMS Control",
-		"order": 60,
+		"order": 10,
 		"action": {
 			"type": "alias",
 			"path": "admin/services/smscontrol/general"

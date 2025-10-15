@@ -1,6 +1,7 @@
 {
         "admin/services/simman2": {
                 "title": "Simman2",
+                "order": 60,
                 "action": {
                         "type": "view",
                         "path": "simman2/simman2"
