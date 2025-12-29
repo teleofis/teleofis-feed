@@ -375,6 +375,7 @@ prepare_env() {
 	config_load ipsec
 	config_foreach config_ipsec ipsec
 	config_foreach config_conn conn
+	sync
 }
 
 reload_service() {
@@ -396,6 +397,7 @@ stop_service() {
 	ipsec_reset
 	swan_reset
 	secret_reset
+	sync
 }
 
 start_service() {
