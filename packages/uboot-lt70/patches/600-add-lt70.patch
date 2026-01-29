@@ -132,10 +132,10 @@ index 0000000..7254b80
 +	status = "okay";
 +};
 diff --git a/arch/mips/mach-mtmips/mt7621/Kconfig b/arch/mips/mach-mtmips/mt7621/Kconfig
-index 008a28f..3fb821c 100644
+index 8fe6e0a2d9a..f118d040ade 100644
 --- a/arch/mips/mach-mtmips/mt7621/Kconfig
 +++ b/arch/mips/mach-mtmips/mt7621/Kconfig
-@@ -99,17 +99,23 @@ config BOARD_MT7621_NAND_RFB
+@@ -99,16 +99,22 @@ config BOARD_MT7621_NAND_RFB
  	  sockets, 1 RGMII to external GbE PHY, 2 audio jacks (in/out),
  	  JTAG pins and expansion GPIO pins.
  
@@ -145,7 +145,6 @@ index 008a28f..3fb821c 100644
  endchoice
  
  config SYS_CONFIG_NAME
- 	string "Board configuration name"
  	default "mt7621" if  BOARD_MT7621_RFB || BOARD_MT7621_NAND_RFB
 +	default "lt70" if  BOARD_TELEOFIS_LT70
  
@@ -156,7 +155,7 @@ index 008a28f..3fb821c 100644
  
  config SYS_VENDOR
  	default "mediatek" if BOARD_MT7621_RFB || BOARD_MT7621_NAND_RFB
-+	default "teleofis" if BOARD_TELEOFIS_LT70
++	default "lt70" if  BOARD_TELEOFIS_LT70
  
  endif
 diff --git a/board/teleofis/lt70/Kconfig b/board/teleofis/lt70/Kconfig

@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
-PKG_VERSION:=2023.04
-PKG_HASH:=e31cac91545ff41b71cec5d8c22afd695645cd6e2a442ccdacacd60534069341
+PKG_VERSION:=2024.10
+PKG_HASH:=b28daf4ac17e43156363078bf510297584137f6df50fced9b12df34f61a92fb0
 PKG_BUILD_DEPENDS:=!(TARGET_ramips||TARGET_mediatek_mt7623):arm-trusted-firmware-tools/host
 
 UBOOT_USE_INTREE_DTC:=1
@@ -51,6 +51,27 @@ endef
 UBOOT_TARGETS := \
 	teleofis_lt70
 
+UBOOT_CUSTOMIZE_CONFIG := \
+	--disable TOOLS_KWBIMAGE \
+	--disable TOOLS_LIBCRYPTO \
+	--disable TOOLS_MKEFICAPSULE \
+	--enable SERIAL_RX_BUFFER
+
+ifdef CONFIG_TARGET_mediatek
+UBOOT_MAKE_FLAGS += $(UBOOT_IMAGE:.fip=.bin)
+endif
+
+define Build/fip-image
+	$(if $(FIP_COMPRESS),\
+		xz -f -e -k -9 -C crc32 $(STAGING_DIR_IMAGE)/$(if $(BL2_SOC),$(BL2_SOC),$(BUILD_SUBTARGET))-$(BL2_BOOTDEV)-$(if $(BL2_DDRTYPE),$(BL2_DDRTYPE)-)$(if $(BL2_DDRBLOB),$(BL2_DDRBLOB)ddr-)bl31.bin ;\
+		xz -f -e -k -9 -C crc32 $(PKG_BUILD_DIR)/u-boot.bin \
+	)
+	$(STAGING_DIR_HOST)/bin/fiptool create \
+		--soc-fw $(STAGING_DIR_IMAGE)/$(if $(BL2_SOC),$(BL2_SOC),$(BUILD_SUBTARGET))-$(BL2_BOOTDEV)-$(if $(BL2_DDRTYPE),$(BL2_DDRTYPE)-)$(if $(BL2_DDRBLOB),$(BL2_DDRBLOB)ddr-)bl31.bin$(if $(FIP_COMPRESS),.xz) \
+		--nt-fw $(PKG_BUILD_DIR)/u-boot.bin$(if $(FIP_COMPRESS),.xz) \
+		$(PKG_BUILD_DIR)/u-boot.fip
+endef
+
 ifdef CONFIG_TARGET_ramips_mt7621
 define Build/Prepare
 	$(call Build/Prepare/Default)
@@ -69,6 +90,9 @@ endef
 
 define Build/Compile
 	$(call Build/Compile/U-Boot)
+ifeq ($(UBOOT_IMAGE),u-boot.fip)
+	$(call Build/fip-image)
+endif
 endef
 
 # don't stage files to bindir, let target/linux/mediatek/image/*.mk do that
