@@ -5,12 +5,12 @@ json_load "$(ubus call system board)"
 json_get_var MODEL model
 case "$MODEL" in
 	"TELEOFIS LT70")
-		uci set simman2.core.pwrkey_gpio_pin='495'
-		uci set simman2.core.gsmpow_gpio_pin='-480'
-		uci set simman2.core.simdet_gpio_pin='497'
-		uci set simman2.core.simaddr_gpio_pin='496'
-		uci set simman2.core.simdet0_gpio_pin='493'
-		uci set simman2.core.simdet1_gpio_pin='494'
+		uci set simman2.core.pwrkey_gpio_pin='527'
+		uci set simman2.core.gsmpow_gpio_pin='-512'
+		uci set simman2.core.simdet_gpio_pin='529'
+		uci set simman2.core.simaddr_gpio_pin='528'
+		uci set simman2.core.simdet0_gpio_pin='525'
+		uci set simman2.core.simdet1_gpio_pin='526'
 		uci commit simman2
 	;;
 	"TELEOFIS RTUx68" | "TELEOFIS RTUx68 RE-DE")
