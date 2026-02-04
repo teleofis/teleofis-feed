@@ -35,6 +35,7 @@ define Package/base-files-lt70/install
 	$(CP) ./files/* $(1)/
 	$(VERSION_SED_SCRIPT) $(1)/etc/banner
 	$(VERSION_SED_SCRIPT) $(1)/etc/openwrt_release
+	$(VERSION_SED_SCRIPT) $(1)/usr/lib/os-release
 endef
 
 $(eval $(call BuildPackage,base-files-lt70))
