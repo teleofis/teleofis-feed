@@ -1,8 +1,8 @@
 #!/bin/sh /etc/rc.common
 # Copyright (C) 2006-2011 OpenWrt.org
 
-START=98
-STOP=98
+START=65
+STOP=65
 
 USE_PROCD=1
 PROG=/sbin/ntpd
