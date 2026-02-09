@@ -1,40 +1,12 @@
 #!/bin/sh /etc/rc.common
 
-START=50
+START=30
+STOP=30
+USE_PROCD=1
 
 GPIO_BASE="608"
 
-load_iolines_boot() {
-
-	config_get dev "$1" "dev"
-
-	adc=$(echo ${dev:3:1})
-
-	config_get mode "$1" "mode"
-	config_get enabled "$1" "enabled" "0"
-	if [ $enabled -eq 1 ]; then
-		case "$mode" in
-			"mode1")
-				echo low > /dev/pu$adc/direction
-				echo low > /dev/pd$adc/direction
-				;;
-			"mode2")
-				echo high > /dev/pu$adc/direction
-				echo low > /dev/pd$adc/direction
-				;;
-			"mode3")
-				echo low > /dev/pu$adc/direction
-				echo high > /dev/pd$adc/direction
-				;;
-		esac
-	else
-		echo low > /dev/pu$adc/direction
-		echo low > /dev/pd$adc/direction
-	fi
-}
-
 load_iolines() {
-
 	config_get dev "$1" "dev"
 
 	adc=$(echo ${dev:3:1})
@@ -58,25 +30,11 @@ load_iolines() {
 
 }
 
-boot() {
-	gpio=$GPIO_BASE
-	count="0"
-	while [ "$gpio" -le "$((GPIO_BASE + 17))" ]
-	do
-		echo $gpio > /sys/class/gpio/export
-		if [ "$count" -le "8" ]; then
-			ln -s /sys/class/gpio/gpio$gpio /dev/pu$count 
-		else
-			ln -s /sys/class/gpio/gpio$gpio /dev/pd$((count-9))
-		fi
-		gpio=$((gpio + 1))
-		count=$((count + 1))
-	done
-	config_load iolines
-	config_foreach load_iolines_boot io
-}
-
-restart() {
+start_service() {
 	config_load iolines
 	config_foreach load_iolines io
+}
+
+service_triggers() {
+	procd_add_reload_trigger "iolines"
 }

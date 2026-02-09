@@ -33,8 +33,7 @@ define Package/iolines-lt70/install
 	$(CP) ./files/iolines.config $(1)/etc/config/iolines
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/iolines.init $(1)/etc/init.d/iolines
-	$(INSTALL_DIR) $(1)/etc/uci-defaults
-	$(INSTALL_BIN) ./files/iolines.defaults $(1)/etc/uci-defaults/20_iolines
+	$(INSTALL_BIN) ./files/iolines-boot.init $(1)/etc/init.d/iolines-boot
 endef
 
 $(eval $(call BuildPackage,iolines-lt70))
