@@ -162,6 +162,7 @@ config_conn() {
 	local remote_sourceip
 	local remote_updown
 	local remote_firewall
+	local type
 	local ikelifetime
 	local ikeletter
 	local lifetime
@@ -172,6 +173,8 @@ config_conn() {
 	local dpddelay
 	local inactivity
 	local keyexchange
+	local leftprotoport
+	local rightprotoport
 
 	config_name=$1
 
@@ -231,6 +234,7 @@ config_conn() {
 	config_get remote_sourceip          "$1"           remote_sourceip ""
 	config_get remote_updown            "$1"           remote_updown ""
 	config_get remote_firewall          "$1"           remote_firewall ""
+	config_get type                     "$1"           type "tunnel"
 	config_get ikelifetime              "$1"           ikelifetime ""
 	config_get ikeletter                "$1"           ikeletter ""
 	config_get keylife                  "$1"           keylife ""
@@ -248,6 +252,8 @@ config_conn() {
 	config_get esp_encryption_algorithm	"$1"           esp_encryption_algorithm
 	config_get esp_hash_algorithm		"$1"           esp_hash_algorithm
 	config_get esp_pfs_group		    "$1"           esp_pfs_group
+	config_get leftprotoport		    "$1"           leftprotoport
+	config_get rightprotoport		    "$1"           rightprotoport
 
 	[ -n "$local_nat" ] && local_subnet=$local_nat
 
@@ -263,7 +269,7 @@ config_conn() {
 
 	ipsec_xappend "  authby=secret"
 	ipsec_xappend "  closeaction=restart"
-	ipsec_xappend "  type=tunnel"
+	ipsec_xappend "  type=$type"
 	ipsec_xappend "  ikelifetime=$ikelifetime$ikeletter"
 	ipsec_xappend "  keylife=$keylife$letter"
 	ipsec_xappend "  margintime=$margintime"
@@ -302,6 +308,8 @@ config_conn() {
 
 	[ -n "$local_identifier" ] && ipsec_xappend "  leftid=$local_identifier"
 	[ -n "$remote_identifier" ] && ipsec_xappend "  rightid=$remote_identifier"
+	[ -n "$leftprotoport" ] && ipsec_xappend "  leftprotoport=$leftprotoport"
+	[ -n "$rightprotoport" ] && ipsec_xappend "  rightprotoport=$rightprotoport"
 	[ -n "$local_updown" ] && ipsec_xappend "  leftupdown=$local_updown"
 	[ -n "$remote_updown" ] && ipsec_xappend "  rightupdown=$remote_updown"
 	ipsec_xappend "  keyexchange=$keyexchange"
