@@ -1,9 +1,14 @@
 #!/bin/sh
 
+error_exit(){
+	exit 1
+}
+
 unsupported_request(){
 	echo "Unsupported request: adc1 adc2 adc3 adc4 hostname \
 		serialnum release imei simstatus ccid registration nettype baseid packtype \
 		imsi operator voltage temp uptime currentwan wanip"
+	error_exit
 }
 
 get_adc(){
@@ -41,42 +46,129 @@ case "$1" in
 	"serialnum")
 		getserialnum
 	;;
+	"mac")
+		fw_printenv -n ethaddr
+	;;
 	"release")
 		. /etc/openwrt_release
-		echo $DISTRIB_DESCRIPTION
+		echo $DISTRIB_DESCRIPTION | sed 's/ .*//'
 	;;
 	"imei")
-		simman2_cli -d /dev/ttyGSM1 --get-imei
+		simman2_cli -d /dev/ttyGSM1 --get-imei 2>/dev/null
 	;;
 	"simstatus")
-		simman2_cli -s core
+		simman2_cli -s core 2>/dev/null
+	;;
+	"modem.network.registration")
+		reg=$(simman2_cli -d /dev/ttyGSM1 --get-reg 2>/dev/null)
+		case "$reg" in
+			"NOT REGISTERED")
+				echo "not_registered"
+			;;
+			"REGISTERED, HOME")
+				echo "registered_home"
+			;;
+			"NOT REGISTERED, OPERATOR SEARCH")
+				echo "searching"
+			;;
+			"REGISTRATION DENIED")
+				echo "denied"
+			;;
+			"REGISTERED, ROAMING!")
+				echo "registered_roaming"
+			;;
+			*)
+				echo "unknown"
+			;;
+		esac
+	;;
+	"modem.sim.active.slot")
+		active=$(cat /sys/class/gpio/gpio82/value)
+		if [[ "$active" -eq "0" ]]; then
+			status=$(cat /sys/class/gpio/gpio79/value)
+			if [[ "$status" -eq "1" ]]; then
+				echo 0
+			else
+				echo 1
+			fi
+		fi
+		if [[ "$active" -eq "1" ]]; then
+			status=$(cat /sys/class/gpio/gpio104/value)
+			if [[ "$status" -eq "1" ]]; then
+				echo 0
+			else
+				echo 2
+			fi
+		fi
+	;;
+	"modem.operator.mcc")
+		mcc=$(simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null)
+		if [[ "$mcc" != "ERROR" ]]; then
+			mcc=$(echo $mcc | awk -F '[()]' '{print substr($2,1,2)}')
+		fi
+		echo $mcc
+	;;
+	"modem.operator.mnc")
+		mnc=$(simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null)
+		if [[ "$mnc" != "ERROR" ]]; then
+			mnc=$(echo $mnc | awk -F '[()]' '{print substr($2,3,5)}')
+		fi
+		echo $mnc
 	;;
 	"ccid")
-		simman2_cli -d /dev/ttyGSM1 --get-ccid
+		simman2_cli -d /dev/ttyGSM1 --get-ccid 2>/dev/null
 	;;
 	"imsi")
-		simman2_cli -d /dev/ttyGSM1 --get-imsi
+		simman2_cli -d /dev/ttyGSM1 --get-imsi 2>/dev/null
 	;;
 	"signal")
-		simman2_cli -d /dev/ttyGSM1 --get-rssi
+		simman2_cli -d /dev/ttyGSM1 --get-csq 2>/dev/null
+	;;
+	"rssi")
+		simman2_cli -d /dev/ttyGSM1 --get-rssi 2>/dev/null
+	;;
+	"rsrp")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-rsrp 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
+	;;
+	"rsrq")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-rsrq 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
+	;;
+	"snr")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-sinr 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
 	;;
 	"registration")
-		simman2_cli -d /dev/ttyGSM1 --get-data-status
+		simman2_cli -d /dev/ttyGSM1 --get-data-status 2>/dev/null
 	;;
 	"nettype")
-		simman2_cli -d /dev/ttyGSM1 --get-net-type
+		simman2_cli -d /dev/ttyGSM1 --get-net-type 2>/dev/null
 	;;
 	"baseid")
-		simman2_cli -d /dev/ttyGSM1 --get-bsid
+		simman2_cli -d /dev/ttyGSM1 --get-bsid 2>/dev/null
 	;;
 	"packtype")
-		simman2_cli -d /dev/ttyGSM1 --get-data-type
+		simman2_cli -d /dev/ttyGSM1 --get-data-type 2>/dev/null
 	;;
 	"operator")
-		simman2_cli -d /dev/ttyGSM1 --get-plmn
+		simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null
 	;;
 	"voltage")
-		ubus call info info | grep voltage | awk -F '"' '{print $4}'
+		. /usr/share/libubox/jshn.sh
+		json_load "$(ubus call info info)"
+		json_get_var voltage voltage
+		voltage=$(echo "scale=3;$voltage/1000" | bc -l) 
+		echo "$voltage"
 	;;
 	"temp")
 		ubus call info info | grep temp | awk -F '"' '{print $4}' | awk -F ' ' '{print $1}'
@@ -101,6 +193,7 @@ case "$1" in
 			echo $wan
 		else
 			echo "N/A"
+			error_exit
 		fi
 	;;
 	"wanip")
@@ -120,6 +213,7 @@ case "$1" in
 			ip -f inet addr show $wan | awk '/inet / {print $2}' | cut -d "/" -f 1
 		else
 			echo "N/A"
+			error_exit
 		fi
 	;;
 	*)
