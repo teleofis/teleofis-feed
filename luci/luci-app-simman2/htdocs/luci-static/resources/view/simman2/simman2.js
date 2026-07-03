@@ -221,6 +221,18 @@ return view.extend({
 		o = s.taboption('info', DummyValueExt, 'sig_lev', _('Signal Strength'));
 		o.modalonly = true;
 
+		o = s.taboption('info', DummyValueExt, 'rssi', _('RSSI'));
+		o.modalonly = true;
+
+		o = s.taboption('info', DummyValueExt, 'rsrp', _('RSRP'));
+		o.modalonly = true;
+
+		o = s.taboption('info', DummyValueExt, 'rsrq', _('RSRQ'));
+		o.modalonly = true;
+
+		o = s.taboption('info', DummyValueExt, 'sinr', _('SINR'));
+		o.modalonly = true;
+
 		o = s.taboption('info', DummyValueExt, 'reg_stat', _('Registration Status'));
 		o.modalonly = true;
 
@@ -254,7 +266,11 @@ return view.extend({
 				document.getElementById('cbid.simman2.%s.pincode_stat'.format(section_id)).textContent = t.pin_state || 'n/a';
 				document.getElementById('cbid.simman2.%s.operator'.format(section_id)).textContent = t.operator || 'n/a';
 				document.getElementById('cbid.simman2.%s.sig_lev'.format(section_id)).textContent = t.csq || 'n/a';
-				document.getElementById('cbid.simman2.%s.reg_stat'.format(section_id)).textContent = t.net_reg || 'n/a';				
+				document.getElementById('cbid.simman2.%s.rsrp'.format(section_id)).textContent = t.rsrp || 'n/a';
+				document.getElementById('cbid.simman2.%s.rsrq'.format(section_id)).textContent = t.rsrq || 'n/a';
+				document.getElementById('cbid.simman2.%s.sinr'.format(section_id)).textContent = t.sinr || 'n/a';
+				document.getElementById('cbid.simman2.%s.rssi'.format(section_id)).textContent = t.rssi || 'n/a';
+				document.getElementById('cbid.simman2.%s.reg_stat'.format(section_id)).textContent = t.net_reg || 'n/a';
 				document.getElementById('cbid.simman2.%s.net_type'.format(section_id)).textContent = t.net_type || 'n/a';
 				document.getElementById('cbid.simman2.%s.gprs_reg_stat'.format(section_id)).textContent = t.data_reg || 'n/a';
 				document.getElementById('cbid.simman2.%s.pack_type'.format(section_id)).textContent = t.data_type || 'n/a';

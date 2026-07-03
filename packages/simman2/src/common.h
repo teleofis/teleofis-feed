@@ -22,6 +22,10 @@
 #define	POWER_OFF 		15
 #define	POWER_UP 		16
 #define	INFO_OP 		17
+#define	INFO_RSRP		18
+#define	INFO_RSRQ		19
+#define	INFO_SINR		20
+#define	INFO_RSSI		21
 
 #define IN		0
 #define OUT		1
@@ -107,6 +111,10 @@ struct modems_ops{
 	int (*set_pin)(struct settings_entry *, char *);
 	int (*set_auth)(struct settings_entry *, char *, char *, char *);
 	int (*imsi)(char *,char *);
+	int (*rsrp)(char *,char *);
+	int (*rsrq)(char *,char *);
+	int (*sinr)(char *,char *);
+	int (*rssi)(char *,char *);
 };
 
 extern struct modems_ops ehs5_ops;
@@ -132,6 +140,10 @@ int modem_common_set_mode(struct settings_entry *settings, char *mode);
 int modem_common_set_apn(struct settings_entry *settings, char *apn);
 int modem_common_set_pin(struct settings_entry *settings, char *pin);
 int modem_common_set_auth(struct settings_entry *settings, char *auth, char *user, char *pass);
+int modem_common_rsrp(char *receive, char *device);
+int modem_common_rsrq(char *receive, char *device);
+int modem_common_sinr(char *receive, char *device);
+int modem_common_rssi(char *receive, char *device);
 
 int modem_send_command(char *receive, char *device, char *at_command, char *wait_output);
 int common_awk_f(char *source_str, char *delim, uint8_t num);

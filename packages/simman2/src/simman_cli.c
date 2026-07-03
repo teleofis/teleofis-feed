@@ -43,6 +43,10 @@ int GetAllInfo(struct settings_entry *settings)
 		fprintf(stdout, "  \"pin_state\": \"%s\",\n", modem_summary(modem,INFO_PINSTAT, settings->atdevice));
 		fprintf(stdout, "  \"operator\": \"%s\",\n", modem_summary(modem,INFO_OP, settings->atdevice));
 		fprintf(stdout, "  \"csq\": \"%s\",\n", modem_summary(modem,INFO_SIGLEV, settings->atdevice));
+		fprintf(stdout, "  \"rssi\": \"%s\",\n", modem_summary(modem,INFO_RSSI, settings->atdevice));
+		fprintf(stdout, "  \"rsrp\": \"%s\",\n", modem_summary(modem,INFO_RSRP, settings->atdevice));
+		fprintf(stdout, "  \"rsrq\": \"%s\",\n", modem_summary(modem,INFO_RSRQ, settings->atdevice));
+		fprintf(stdout, "  \"sinr\": \"%s\",\n", modem_summary(modem,INFO_SINR, settings->atdevice));
 		fprintf(stdout, "  \"net_reg\": \"%s\",\n", modem_summary(modem,INFO_REGSTAT, settings->atdevice));
 		fprintf(stdout, "  \"net_type\": \"%s\",\n", modem_summary(modem,INFO_NETTYPE, settings->atdevice));
 		fprintf(stdout, "  \"data_reg\": \"%s\",\n", modem_summary(modem,INFO_GPRSSTAT, settings->atdevice));
@@ -56,6 +60,13 @@ int GetAllInfo(struct settings_entry *settings)
 	}
 	return 0;
 }
+
+enum {
+	OPT_RSRP = 256,
+	OPT_RSRQ,
+	OPT_SINR,
+	OPT_CSQ,
+};
 
 static const char *optString = "d:a:s:x:o:cprbnimfRBSDIPh?";
 static const struct option longOpts[] = {
@@ -75,6 +86,10 @@ static const struct option longOpts[] = {
 		{"get-modem",no_argument, NULL,'m'},
 		{"get-fw",no_argument, NULL,'f'},
 		{"get-plmn",no_argument, NULL,'P'},
+		{"get-rsrp",no_argument, NULL,OPT_RSRP},
+		{"get-rsrq",no_argument, NULL,OPT_RSRQ},
+		{"get-sinr",no_argument, NULL,OPT_SINR},
+		{"get-csq",no_argument, NULL,OPT_CSQ},
 		{"all",required_argument, NULL,'a'},
 		{"power-off",required_argument, NULL,'x'},
 		{"power-up",required_argument, NULL,'o'},
@@ -90,7 +105,7 @@ void display_usage(void)
 			"  --device=PORT, -d PORT:          Set device name to PORT\n"
 			"  --get-ccid, -c:                  Get CCID SIM card\n"
 			"  --get-pin-status, -p:            Get PIN status\n"
-			"  --get-rssi, -r:                  Get RSSI level\n"
+			"  --get-rssi, -r:                  Get RSSI, dBm\n"
 			"  --get-reg, -R:                   Get registration status\n"
 			"  --get-bsid, -B:                  Get base station id\n"
 			"  --get-band, -b:                  Get mobile band\n"
@@ -102,6 +117,10 @@ void display_usage(void)
 			"  --get-modem, -m:                 Get modem type\n"
 			"  --get-fw, -f:                    Get firmware version\n"
 			"  --get-plmn, -P:                    Get currently selected operator\n"
+			"  --get-rsrp:                      Get LTE RSRP (dBm)\n"
+			"  --get-rsrq:                      Get LTE RSRQ (dB)\n"
+			"  --get-sinr:                      Get LTE SINR (dB)\n"
+			"  --get-csq:                       Get signal quality (CSQ, 0..31)\n"
 			"       OR\n"
 			"  --all=CONFIG, -a CONFIG:         Get all information about the requested CONFIG\n"
 			"  --get-sim=CONFIG, -s CONFIG:     Get SIM information\n"
@@ -132,7 +151,7 @@ int main(int argc, char **argv)
 				cmd=INFO_PINSTAT;
 				break;
 			case 'r':
-				cmd=INFO_SIGLEV;
+				cmd=INFO_RSSI;
 				break;
 			case 'R':
 				cmd=INFO_REGSTAT;
@@ -166,6 +185,18 @@ int main(int argc, char **argv)
 				break;
 			case 'P':
 				cmd=INFO_OP;
+				break;
+			case OPT_RSRP:
+				cmd=INFO_RSRP;
+				break;
+			case OPT_RSRQ:
+				cmd=INFO_RSRQ;
+				break;
+			case OPT_SINR:
+				cmd=INFO_SINR;
+				break;
+			case OPT_CSQ:
+				cmd=INFO_SIGLEV;
 				break;
 			case 'a':
 				cmd=INFO_ALL;

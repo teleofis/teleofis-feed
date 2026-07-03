@@ -458,6 +458,76 @@ int a7600_set_auth(struct settings_entry *settings,char *auth, char *user,char *
 	return 0;
 }
 
+static int a7600_cpsi_lte_field(char *receive, char *device, uint8_t field){
+	char buf[256]={0};
+
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(modem_send_command(buf,device,"\rAT+CPSI?\r","OK")!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	if(cut_string(buf, "CPSI: ", "\r")!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(buf[0]!='L'){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(common_awk_f(buf,",",field)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	strcpy(receive,buf);
+	return 0;
+}
+
+int a7600_rsrp(char *receive, char *device){
+	int n;
+	if(a7600_cpsi_lte_field(receive,device,12)!=0){
+		return -1;
+	}
+	n = atoi(receive);
+	if(n==255){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	sprintf(receive,"%d",n-141);
+	return 0;
+}
+
+int a7600_rsrq(char *receive, char *device){
+	int n;
+	if(a7600_cpsi_lte_field(receive,device,11)!=0){
+		return -1;
+	}
+	n = atoi(receive);
+	if(n==255){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	sprintf(receive,"%.1f",n*0.5-19.5);
+	return 0;
+}
+
+int a7600_sinr(char *receive, char *device){
+	if(a7600_cpsi_lte_field(receive,device,14)!=0){
+		return -1;
+	}
+	if(atoi(receive)==255){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	return 0;
+}
+
 struct modems_ops a7600_ops = {
 		.name				= a7600_name,
 		.init				= a7600_init,
@@ -482,5 +552,9 @@ struct modems_ops a7600_ops = {
 		.set_mode			= a7600_set_mode,
 		.set_apn			= a7600_set_apn,
 		.set_pin			= a7600_set_pin,
-		.set_auth			= a7600_set_auth
+		.set_auth			= a7600_set_auth,
+		.rsrp				= a7600_rsrp,
+		.rsrq				= a7600_rsrq,
+		.sinr				= a7600_sinr,
+		.rssi				= modem_common_rssi
 };

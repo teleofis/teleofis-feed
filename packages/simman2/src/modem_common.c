@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <fcntl.h>
 #include <errno.h>
@@ -174,6 +175,45 @@ int modem_common_imsi(char *receive, char *device){
 	if(cut_string(receive, "\r\n", "\r\n")!=0){
 		strcpy(receive,"ERROR");
 	}
+	return 0;
+}
+
+int modem_common_rsrp(char *receive, char *device){
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	strcpy(receive,"N/A");
+	return 0;
+}
+
+int modem_common_rsrq(char *receive, char *device){
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	strcpy(receive,"N/A");
+	return 0;
+}
+
+int modem_common_sinr(char *receive, char *device){
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	strcpy(receive,"N/A");
+	return 0;
+}
+
+int modem_common_rssi(char *receive, char *device){
+	if(modem_common_csq(receive,device)!=0 || atoi(receive)==99){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	sprintf(receive,"%d",-113+2*atoi(receive));
 	return 0;
 }
 
