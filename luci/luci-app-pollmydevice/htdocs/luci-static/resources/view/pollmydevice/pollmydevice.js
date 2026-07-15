@@ -134,37 +134,50 @@ return view.extend({
 			o.depends({pack_size: i.toString()});
 		}
 
-		o = s.taboption('general', form.Value, 'client_host', _('Server Host or IP Address'));
-		o.default = 'hub.m2m24.ru';
-		o.datatype = 'string';
+		o = s.taboption('general', form.DynamicList, 'client_server', _('Server list (address:port)'), _('Ports in the range from 1 to 1023 cannot be assigned, except for port 502, which is used for Modbus TCP'));
+		o.modalonly = true;
 		o.depends({mode: 'client'});
-		o.textvalue = function(section_id) {
-			if(uci.get('pollmydevice', section_id, 'mode') === 'client') {
-				return uci.get('pollmydevice', section_id, 'client_host');
-			} else {
-				return '-'
-			}
+		o.validate = function(section_id, value) {
+			var list = this.formvalue(section_id) || [];
+			if (list.length > 5)
+				return _('A maximum of 5 servers is allowed');
+			if (value == '')
+				return true;
+			var m = value.match(/^(.+):(\d+)$/);
+			if (!m)
+				return _('Expected format: address:port');
+			var port = +m[2];
+			if (port != 502 && (port < 1024 || port > 65535))
+				return _('Port must be 502 or within 1024-65535');
+			return true;
 		};
 
-		o = s.taboption('general', form.DummyValue, 'port', _('Port'));
+		o = s.taboption('general', form.DummyValue, 'port', _('Address / Port'));
 		o.modalonly = false;
 		o.textvalue = function(section_id) {
-			if(uci.get('pollmydevice', section_id, 'client_port')) return uci.get('pollmydevice', section_id, 'client_port');
-			if(uci.get('pollmydevice', section_id, 'server_port')) return uci.get('pollmydevice', section_id, 'server_port');
+			var mode = uci.get('pollmydevice', section_id, 'mode');
+			if (mode === 'client') {
+				var list = uci.get('pollmydevice', section_id, 'client_server');
+				if (!Array.isArray(list)) list = list ? [list] : [];
+				return list.join(', ') || '-';
+			}
+			if (mode === 'server') {
+				var port = uci.get('pollmydevice', section_id, 'server_port');
+				return port ? '*:' + port : '-';
+			}
+			return '-';
 		}
 
-		o = s.taboption('general', form.Value, 'client_port', _('Server Port'));
-		o.modalonly = true;
-		o.rmempty = false;
-		o.optional = false;
-		o.default = 6008;
-		o.datatype = 'or(502,range(1025,65535))';
-		o.depends({mode: 'client'});
-
-		o = s.taboption('general', form.Value, 'client_timeout', _('Client Reconnection Timeout (sec)'));
+		o = s.taboption('general', form.Value, 'client_timeout', _('Client Reconnection Timeout (sec)'), _('Interval between reconnection attempts to unavailable servers'));
 		o.modalonly = true;
 		o.default = 60;
-		o.datatype = 'and(uinteger, min(0), max(100000))';
+		o.datatype = 'and(uinteger, min(1), max(100000))';
+		o.depends({mode: 'client'});
+
+		o = s.taboption('general', form.Value, 'client_hold_priority', _('Exchange Priority Hold Time (sec)'));
+		o.modalonly = true;
+		o.default = 60;
+		o.datatype = 'and(uinteger, min(1), max(100000))';
 		o.depends({mode: 'client'});
 
 		o = s.taboption('general', form.ListValue, 'client_auth', _('Client Authentification'));

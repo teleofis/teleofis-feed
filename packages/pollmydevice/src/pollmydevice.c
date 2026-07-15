@@ -14,8 +14,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
-#include <sys/inotify.h>
-#include <signal.h>
 #include <pthread.h>
 #include <termios.h>
 #include <inttypes.h>
@@ -55,14 +53,17 @@
 
 #define MAX_DIGITS_IN_DEV_NUM   4 // 2+2 nonprinted symbols
 #define MAX_CHARS_IN_UCIPATH    128
-#define MAX_INOTIFY_BUF_SIZE    1024
 
-#define TMP_PATH_LENGTH         20
+#define TMP_PATH_LENGTH         64
 #define DOMAIN_NAME_LENGTH      256
 
 #define IMEI_LENGTH             15
 
 #define FIRST_RECONN_TIMEOUT    10
+
+#define MAX_CLIENT_SERVERS      5
+
+#define RESOLVE_RETRY_FAILS     3
 
 //MODBUS
 #define MAX_PACK_SIZE			300
@@ -86,8 +87,10 @@ typedef struct
     int serverPort;
     int connection_mode;
     int holdConnTime;
-    char clientHost[DOMAIN_NAME_LENGTH];
-    int clientPort;
+    char clientHost[MAX_CLIENT_SERVERS][DOMAIN_NAME_LENGTH];
+    int clientPort[MAX_CLIENT_SERVERS];
+    int serverCount;
+    int holdPriorityTime;
     int clientAuth;
     int clientTimeout;
     long long int clientID;
@@ -96,6 +99,7 @@ typedef struct
     int timeout_pack;
     int size_pack;
     int rs485_mode;
+    int deviceID;
 } device_config_t;
 
 
@@ -117,14 +121,51 @@ typedef struct{
 	struct itimerspec newValue;
 }t_mb_tcp;
 
-struct fdStructType 
+#define SRV_DISCONNECTED    0
+#define SRV_RESOLVING       1
+#define SRV_CONNECTING      2
+#define SRV_CONNECTED       3
+
+typedef struct{
+    int					sock;
+    struct sockaddr_in	addr;
+    int					state;
+    int					resolved;
+    int					failCount;
+    int					authorized;
+    char				txBuf[MAX_SERIAL_BUF_SIZE];
+    int					txLen;
+    int					blocked;
+    unsigned long		dropped;
+}client_srv_t;
+
+static const char authRequest[28] = "\xC0\x00\x06\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xE7\x48\xC2";
+static const char authAcknow[28]  = "\xC0\x00\x06\x01\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3F\x25\xC2";
+
+typedef struct{
+    int		index;
+    int		port;
+    char	host[DOMAIN_NAME_LENGTH];
+}resolve_req_t;
+
+typedef struct{
+    int					index;
+    int					ok;
+    struct sockaddr_in	addr;
+}resolve_resp_t;
+
+struct fdStructType
 {
     int 		mainSocket;
     int 		serialPort;
     int 		TCPtimer;
+    int 		priorityTimer;
     int 		epollFD;
+    int 		resolverFd;
     t_rtu 		state_rtu;
     t_mb_tcp	mb_tcp;
+    client_srv_t	*clientSrv;
+    int quiet;
 };
 
 void CleanThread(struct fdStructType *threadFD);
@@ -140,6 +181,24 @@ void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uin
 void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet);
 void ClearModbus(struct fdStructType *threadFD);
 void send_all(const void *dataBuffer, size_t numOfReadBytes, int flags);
+static void *ResolverThreadFunc(void *args);
+static int ConnectResolved(int epollFD, client_srv_t *srv, const char *host, int port, int quiet);
+static int StartConnect(int epollFD, int resolverFd, client_srv_t *srv, int index, const char *host, int port, int quiet);
+static int FinishConnect(int epollFD, client_srv_t *srv, const char *host, int port, int quiet);
+static void DropServer(int epollFD, client_srv_t *srv);
+static void UpdateEpollTx(int epollFD, client_srv_t *srv);
+static void SendToServer(int epollFD, client_srv_t *srv, const char *host, int port, const char *data, int len, int quiet);
+static void FlushTx(int epollFD, client_srv_t *srv, const char *host, int port, int quiet);
+static int ServerReady(const client_srv_t *srv, int clientAuth);
+static int HandleAuth(client_srv_t *srv, long long int clientID, const char *host, int port, char *dataBuffer, int numOfReadBytes, int quiet);
+static void ResetModbusState(struct fdStructType *threadFD);
+
+static __thread char logTagBuf[96];
+const char *LogTag(void) { return logTagBuf; }
+static void SetLogTag(int id)
+{
+    snprintf(logTagBuf, sizeof(logTagBuf), "dev%d: ", id);
+}
 
 /*****************************************/
 /*************** MAIN FUNC ***************/
@@ -152,7 +211,6 @@ int main(int argc, char **argv)
     pthread_attr_setdetachstate(&threadAttr, PTHREAD_CREATE_DETACHED); 
 
     device_config_t deviceConfig[NUM_OF_DEVICES];
-    device_config_t newDeviceConfig;
 
     int i;
     int result;
@@ -184,87 +242,8 @@ int main(int argc, char **argv)
         }
     }
 
-    // inotify for parsing changed in /etc/config/pollmydevice
-    int inotifyFD = inotify_init();
-    if(inotifyFD < 0)
-    {
-        LOG("Couldn't initialize inotify");
-    }
-    int inotifyWatch = inotify_add_watch(inotifyFD, "/overlay/upper/etc/config/pollmydevice", IN_MODIFY); 
-    if (inotifyWatch < 0)
-    {
-        printf("Couldn't add watch to /etc/config/pollmydevice\n");
-    }
-    char inotifyBuf[1024];
-
-    // epoll for detecting inotify
-    struct epoll_event epollConfig;
-    struct epoll_event epollEvent[1];
-    int epollFD = epoll_create(sizeof(inotifyFD));
-
-    epollConfig.events = EPOLLIN | EPOLLET;
-    epollConfig.data.fd = inotifyFD;
-    // add our inotify into epoll
-    result = epoll_ctl(epollFD, EPOLL_CTL_ADD, inotifyFD, &epollConfig);
-    if(result < 0)
-    {
-        LOG("Error while inotify epoll regisration\n");
-    }
-
-
-    while (1) 
-    {
-        result = epoll_wait(epollFD, epollEvent, MAX_EPOLL_EVENTS, EPOLL_RUN_TIMEOUT);
-        
-        read(inotifyFD, &inotifyBuf, MAX_INOTIFY_BUF_SIZE);
-        inotifyWatch = inotify_add_watch(inotifyFD, "/overlay/upper/etc/config/pollmydevice", IN_MODIFY); // not working with luci witout it (mystic)
-
-        for(i = 0; i < NUM_OF_DEVICES; i++)
-        { 
-            // GET SETTINGS
-            newDeviceConfig = GetFullDeviceConfig(i);
-            // IF SETTINGS WAS CHANGED
-            if(memcmp(&newDeviceConfig, deviceConfig+i, sizeof(newDeviceConfig)) != 0)
-            {
-
-                // IF ANY THREAD IS WORKING ON THIS DERVICE, STOP IT
-                if(thread[i] != 0)
-                {  
-                    result = pthread_cancel(thread[i]);
-                    thread[i] = 0;
-                    if(result != 0) 
-                    {
-                        LOG("Stopping service thread for dev ID %d false. Error: %d\n", i, result);
-                    } else
-                    {
-                        LOG("Service thread is stopped for dev ID %d\n", i);
-                    }
-                }
-                
-                // WRITE NEW CONFIG INTO STRUCT deviceConfig[i]
-                memcpy(deviceConfig+i, &newDeviceConfig, sizeof(newDeviceConfig));
-
-                // ACCODING TO MODE START CLIENT OR SERVER THREAD
-                if(deviceConfig[i].mode == MODE_SERVER)
-                {
-                    result = pthread_create(&thread[i], &threadAttr, ServerThreadFunc, (void*) &deviceConfig[i]);
-
-                    if(result != 0) 
-                        LOG("Creating server thread for dev ID %s false. Error: %d\n", deviceConfig[i].deviceName, result);
-                    else
-                        LOG("Server thread is started for dev ID %s\n", deviceConfig[i].deviceName);
-                }
-                else if (deviceConfig[i].mode == MODE_CLIENT)
-                {
-                    result = pthread_create(&thread[i], &threadAttr, ClientThreadFunc, (void*) &deviceConfig[i]);
-                    if(result != 0) 
-                        LOG("Creating client thread for dev %s false. Error: %d\n", deviceConfig[i].deviceName, result);
-                    else
-                        LOG("Client thread is started for dev %s\n", deviceConfig[i].deviceName);
-                }
-            }
-        }
-    }
+    while(1)
+        pause();
     return 0;
 }
 
@@ -272,26 +251,355 @@ int main(int argc, char **argv)
 // When thread close we must close all it's file descriptors
 void CleanThread(struct fdStructType *threadFD)
 {
-    close(threadFD->mainSocket);
     close(threadFD->serialPort);
     close(threadFD->TCPtimer);
+    if(threadFD->priorityTimer >= 0)
+        close(threadFD->priorityTimer);
+    if(threadFD->resolverFd >= 0)
+        close(threadFD->resolverFd);
     close(threadFD->mb_tcp.timer);
     close(threadFD->epollFD);
+    if(threadFD->clientSrv != NULL)
+    {
+        int k;
+        for(k = 0; k < MAX_CLIENT_SERVERS; k++)
+            if(threadFD->clientSrv[k].sock >= 0)
+                close(threadFD->clientSrv[k].sock);
+    }
+    else
+        close(threadFD->mainSocket);
     free(threadFD);
-    LOG("Descriptors closed\n");
+    if(!threadFD->quiet) LOG("Descriptors closed\n");
+}
+
+static void *ResolverThreadFunc(void *args)
+{
+    int chanFd = *(int *)args;
+    resolve_req_t req;
+    resolve_resp_t resp;
+    struct addrinfo hints, *res;
+    char portStr[8];
+    int numOfReadBytes;
+
+    free(args);
+
+    while(1)
+    {
+        numOfReadBytes = read(chanFd, &req, sizeof(req));
+        if(numOfReadBytes != sizeof(req))
+            break;
+
+        bzero(&resp, sizeof(resp));
+        resp.index = req.index;
+        resp.ok = 0;
+
+        bzero(&hints, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        snprintf(portStr, sizeof(portStr), "%d", req.port);
+
+        res = NULL;
+        if(getaddrinfo(req.host, portStr, &hints, &res) == 0 && res != NULL)
+        {
+            memcpy(&resp.addr, res->ai_addr, sizeof(struct sockaddr_in));
+            resp.ok = 1;
+        }
+        if(res != NULL)
+            freeaddrinfo(res);
+
+        if(send(chanFd, &resp, sizeof(resp), MSG_NOSIGNAL) != sizeof(resp))
+            break;
+    }
+
+    close(chanFd);
+    return (void *) 0;
+}
+
+static int ConnectResolved(int epollFD, client_srv_t *srv, const char *host, int port, int quiet)
+{
+    struct epoll_event ev;
+
+    srv->sock = -1;
+    srv->state = SRV_DISCONNECTED;
+    srv->txLen = 0;
+    srv->blocked = 0;
+    srv->dropped = 0;
+    srv->authorized = 0;
+
+    srv->addr.sin_family = AF_INET;
+    srv->addr.sin_port = htons(port);
+
+    srv->sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(srv->sock < 0)
+    {
+        LOG("Error while creating client socket for %s\n", host);
+        return SRV_DISCONNECTED;
+    }
+    fcntl(srv->sock, F_SETFL, O_NONBLOCK);
+
+    ev.data.fd = srv->sock;
+    if(connect(srv->sock, (struct sockaddr *)&srv->addr, sizeof(srv->addr)) == 0)
+    {
+        ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
+        epoll_ctl(epollFD, EPOLL_CTL_ADD, srv->sock, &ev);
+        srv->state = SRV_CONNECTED;
+        LOG("Connected to %s:%d\n", host, port);
+        return SRV_CONNECTED;
+    }
+    if(errno == EINPROGRESS)
+    {
+        ev.events = EPOLLOUT | EPOLLERR | EPOLLHUP;
+        epoll_ctl(epollFD, EPOLL_CTL_ADD, srv->sock, &ev);
+        srv->state = SRV_CONNECTING;
+        return SRV_CONNECTING;
+    }
+
+    LOG("Couldn't connect to %s:%d: %s\n", host, port, strerror(errno));
+    close(srv->sock);
+    srv->sock = -1;
+    srv->failCount++;
+    return SRV_DISCONNECTED;
+}
+
+static int StartConnect(int epollFD, int resolverFd, client_srv_t *srv, int index, const char *host, int port, int quiet)
+{
+    resolve_req_t req;
+
+    if(srv->failCount >= RESOLVE_RETRY_FAILS)
+        srv->resolved = 0;
+
+    if(!srv->resolved)
+    {
+        bzero((char *) &srv->addr, sizeof(srv->addr));
+        if(inet_pton(AF_INET, host, &srv->addr.sin_addr) == 1)
+            srv->resolved = 1;
+    }
+
+    if(srv->resolved)
+        return ConnectResolved(epollFD, srv, host, port, quiet);
+
+    if(resolverFd < 0)
+    {
+        LOG("Error while resolving %s\n", host);
+        return SRV_DISCONNECTED;
+    }
+
+    bzero(&req, sizeof(req));
+    req.index = index;
+    req.port = port;
+    strncpy(req.host, host, sizeof(req.host) - 1);
+
+    if(send(resolverFd, &req, sizeof(req), MSG_NOSIGNAL) != sizeof(req))
+    {
+        LOG("Error while resolving %s\n", host);
+        srv->state = SRV_DISCONNECTED;
+        return SRV_DISCONNECTED;
+    }
+
+    srv->sock = -1;
+    srv->state = SRV_RESOLVING;
+    srv->txLen = 0;
+    srv->blocked = 0;
+    srv->dropped = 0;
+    srv->authorized = 0;
+    return SRV_RESOLVING;
+}
+
+static int FinishConnect(int epollFD, client_srv_t *srv, const char *host, int port, int quiet)
+{
+    int err = 0;
+    socklen_t len = sizeof(err);
+    struct epoll_event ev;
+
+    ev.data.fd = srv->sock;
+
+    if(getsockopt(srv->sock, SOL_SOCKET, SO_ERROR, &err, &len) < 0)
+        err = errno;
+
+    if(err == 0)
+    {
+        ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
+        epoll_ctl(epollFD, EPOLL_CTL_MOD, srv->sock, &ev);
+        srv->state = SRV_CONNECTED;
+        srv->failCount = 0;
+        LOG("Connected to %s:%d\n", host, port);
+        return SRV_CONNECTED;
+    }
+
+    LOG("Couldn't connect to %s:%d: %s\n", host, port, strerror(err));
+    epoll_ctl(epollFD, EPOLL_CTL_DEL, srv->sock, &ev);
+    close(srv->sock);
+    srv->sock = -1;
+    srv->state = SRV_DISCONNECTED;
+    srv->failCount++;
+    return SRV_DISCONNECTED;
+}
+
+static void DropServer(int epollFD, client_srv_t *srv)
+{
+    struct epoll_event ev;
+
+    if(srv->sock >= 0)
+    {
+        ev.events = 0;
+        ev.data.fd = srv->sock;
+        epoll_ctl(epollFD, EPOLL_CTL_DEL, srv->sock, &ev);
+        close(srv->sock);
+    }
+    srv->sock = -1;
+    srv->state = SRV_DISCONNECTED;
+    srv->txLen = 0;
+    srv->blocked = 0;
+    srv->dropped = 0;
+    srv->authorized = 0;
+}
+
+static void UpdateEpollTx(int epollFD, client_srv_t *srv)
+{
+    struct epoll_event ev;
+
+    ev.data.fd = srv->sock;
+    ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
+    if(srv->txLen > 0)
+        ev.events |= EPOLLOUT;
+    epoll_ctl(epollFD, EPOLL_CTL_MOD, srv->sock, &ev);
+}
+
+static void SendToServer(int epollFD, client_srv_t *srv, const char *host, int port, const char *data, int len, int quiet)
+{
+    int sent, tail;
+
+    if(srv->state != SRV_CONNECTED || len <= 0)
+        return;
+
+    if(srv->txLen > 0)
+    {
+        if(srv->txLen + len <= (int)sizeof(srv->txBuf))
+        {
+            memcpy(srv->txBuf + srv->txLen, data, len);
+            srv->txLen += len;
+        }
+        else
+            srv->dropped += len;
+        return;
+    }
+
+    sent = send(srv->sock, data, len, MSG_NOSIGNAL);
+    if(sent == len)
+        return;
+
+    if(sent < 0)
+    {
+        if(errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            LOG("Error sending to %s:%d: %s\n", host, port, strerror(errno));
+            return;
+        }
+        sent = 0;
+    }
+
+    tail = len - sent;
+    memcpy(srv->txBuf, data + sent, tail);
+    srv->txLen = tail;
+    UpdateEpollTx(epollFD, srv);
+    if(!srv->blocked)
+    {
+        srv->blocked = 1;
+        LOG("Backpressure on %s:%d, buffering %d byte(s)\n", host, port, tail);
+    }
+}
+
+static void FlushTx(int epollFD, client_srv_t *srv, const char *host, int port, int quiet)
+{
+    int sent;
+
+    while(srv->txLen > 0)
+    {
+        sent = send(srv->sock, srv->txBuf, srv->txLen, MSG_NOSIGNAL);
+        if(sent <= 0)
+        {
+            if(sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK && !quiet)
+                LOG("Error sending to %s:%d: %s\n", host, port, strerror(errno));
+            return;
+        }
+        srv->txLen -= sent;
+        if(srv->txLen > 0)
+            memmove(srv->txBuf, srv->txBuf + sent, srv->txLen);
+    }
+
+    UpdateEpollTx(epollFD, srv);
+    if(srv->blocked)
+    {
+        srv->blocked = 0;
+        LOG("Backpressure cleared on %s:%d, %lu byte(s) dropped\n", host, port, srv->dropped);
+        srv->dropped = 0;
+    }
+}
+
+static int ServerReady(const client_srv_t *srv, int clientAuth)
+{
+    if(srv->state != SRV_CONNECTED)
+        return 0;
+    if(clientAuth != 0 && !srv->authorized)
+        return 0;
+    return 1;
+}
+
+static int HandleAuth(client_srv_t *srv, long long int clientID, const char *host, int port, char *dataBuffer, int numOfReadBytes, int quiet)
+{
+    int len;
+
+    if(numOfReadBytes != 28)
+    {
+        LOG("Autorization ERROR with %s:%d. Reconnect... \n", host, port);
+        return -1;
+    }
+
+    if(memcmp(dataBuffer, authRequest, 28) == 0)
+    {
+        if(!quiet)
+            LOG("Autorization request from %s:%d\n", host, port);
+        len = FormAuthAnswer(dataBuffer, clientID);
+        if(send(srv->sock, dataBuffer, len, MSG_NOSIGNAL) < 0 && !quiet)
+            LOG("Error while sending auth answer to %s:%d: %s\n", host, port, strerror(errno));
+        return 1;
+    }
+
+    if(memcmp(dataBuffer, authAcknow, 28) == 0)
+    {
+        srv->authorized = 1;
+        LOG("Autorization OK with %s:%d\n", host, port);
+        return 1;
+    }
+
+    LOG("Autorization ERROR with %s:%d. Reconnect... \n", host, port);
+    return -1;
+}
+
+static void ResetModbusState(struct fdStructType *threadFD)
+{
+    bzero(&threadFD->state_rtu, sizeof(t_rtu));
+    bzero(threadFD->mb_tcp.packet, MAX_PACK_SIZE);
+    threadFD->mb_tcp.offset = 0;
+    threadFD->mb_tcp.state = 0;
 }
 /*****************************************/
 /************* SERVER FUNC ***************/
 /*****************************************/
 void *ServerThreadFunc(void *args)
-{ 
+{
     struct fdStructType *threadFD = malloc(sizeof(struct fdStructType));
+    threadFD->priorityTimer = -1;
+    threadFD->resolverFd = -1;
+    threadFD->clientSrv = NULL;
     
     pthread_cleanup_push(CleanThread, threadFD);
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     device_config_t deviceConfig = {0};
     memcpy(&deviceConfig, args, sizeof(device_config_t));
+    SetLogTag(deviceConfig.deviceID);
+    threadFD->quiet = deviceConfig.quiet;
 
     int dataBufferSize = MAX_SERIAL_BUF_SIZE;
     int listeningServerPort = deviceConfig.serverPort;
@@ -398,7 +706,7 @@ void *ServerThreadFunc(void *args)
         if (ioctl(threadFD->serialPort, TIOCSRS485, &rs485conf) < 0) {
             LOG("Can not set RS485 mode for %s\n", deviceConfig.deviceName);
         } else {
-            LOG("RS485 mode for %s is successfully set\n", deviceConfig.deviceName);
+            if(!deviceConfig.quiet) LOG("RS485 mode for %s is successfully set\n", deviceConfig.deviceName);
         }
     }
 
@@ -462,10 +770,10 @@ void *ServerThreadFunc(void *args)
     unsigned char val = (uint8_t)((deviceConfig.timeout_pack)%256);
     serialPortConfig.c_line &= ~ICANON;					//DISABLE CANONCIAL
     serialPortConfig.c_cc[VTIME]    = val;            	// inter-character timer
-    LOG("Set VTIME=%d\n", val);
+    if(!deviceConfig.quiet) LOG("Set VTIME=%d\n", val);
     val = (uint8_t)(deviceConfig.size_pack%256);
     serialPortConfig.c_cc[VMIN]     = val;              // blocking read until 1 character arrives (0 - no, 1 - yes)
-    LOG("Set VMIN=%d\n", val);
+    if(!deviceConfig.quiet) LOG("Set VMIN=%d\n", val);
 
     // write config
     tcflush(threadFD->serialPort, TCIFLUSH);                      // clean the line
@@ -560,23 +868,20 @@ void *ServerThreadFunc(void *args)
                 result = accept(threadFD->mainSocket, NULL, NULL);  // we don't care about a client address
                 if(result < 0)
                 {
-                    if (!deviceConfig.quiet)
-                        LOG("Error while accepting connection\n");
+                    LOG("Error while accepting connection\n");
                 }
                 else
                     lastActiveConnSocket = result;
 
                 fcntl(lastActiveConnSocket, F_SETFL, O_NONBLOCK);   // set listening socket as nonblocking
-                if (!deviceConfig.quiet)
-                    LOG("New incoming connection\n");
+                LOG("New incoming connection\n");
 
                 epollConfig.data.fd = lastActiveConnSocket;
                 epollConfig.events = EPOLLIN | EPOLLET;             // message, edge trigger
                 result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, lastActiveConnSocket, &epollConfig);
                 if(result < 0)
                 {
-                    if (!deviceConfig.quiet)
-                        LOG("Epoll connection addition error %d\n", result);
+                    LOG("Epoll connection addition error %d\n", result);
                 } else {
                     if(deviceConfig.connection_mode == 1)
                     {
@@ -623,7 +928,7 @@ void *ServerThreadFunc(void *args)
                 if(deviceConfig.connection_mode == 0)
                 {
                     blockOther = 0; // free access for all clients
-                    LOG("Connection hold time is up. Free access for all clients\n");
+                    if(!deviceConfig.quiet) LOG("Connection hold time is up. Free access for all clients\n");
                 }
             }
 
@@ -662,8 +967,7 @@ void *ServerThreadFunc(void *args)
                         	{
                         		blockOther = 0; // free access for all clients
                         	}
-                            if (!deviceConfig.quiet)
-                        	    LOG("Connection closed\n");
+                            LOG("Connection closed\n");
                             lastActiveConnSocket = -1;
                         }else  lastActiveConnSocket = eventSource;
                     }
@@ -686,16 +990,14 @@ void *ServerThreadFunc(void *args)
                     {
                         blockOther = 0; // free access for all clients
                     }
-                    if (!deviceConfig.quiet)
-                        LOG("Connection closed\n");
+                    LOG("Connection closed\n");
                     lastActiveConnSocket = -1;
                 }
             }
 
             else
             {
-                if (!deviceConfig.quiet)
-                    LOG("Unknown epoll event\n");
+                LOG("Unknown epoll event\n");
                 //lastActiveConnSocket = -1;
             }
         }      
@@ -711,32 +1013,49 @@ void *ServerThreadFunc(void *args)
 /************* CLIENT FUNC ***************/
 /*****************************************/
 void *ClientThreadFunc(void *args)
-{ 
+{
     struct fdStructType *threadFD = malloc(sizeof(struct fdStructType));
+    threadFD->priorityTimer = -1;
+    threadFD->resolverFd = -1;
+    threadFD->clientSrv = NULL;
     
     pthread_cleanup_push(CleanThread, threadFD);
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     device_config_t deviceConfig = {0};
     memcpy(&deviceConfig, args, sizeof(device_config_t));
+    SetLogTag(deviceConfig.deviceID);
+    threadFD->quiet = deviceConfig.quiet;
+
+    LOG("Client thread for dev %s: auth=%d, modbus=%d, servers=%d\n", deviceConfig.deviceName, deviceConfig.clientAuth, deviceConfig.modbus_gateway, deviceConfig.serverCount);
 
     int dataBufferSize = MAX_SERIAL_BUF_SIZE;
 
     int eventSource;
 
     char dataBuffer[dataBufferSize];
-    const char authRequest[28] = "\xC0\x00\x06\x00\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xE7\x48\xC2";
-    const char authAcknow[28] = "\xC0\x00\x06\x01\x14\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3F\x25\xC2";
     int numOfReadBytes;
 
-    int serverAvailable = 0, autorized = 0;
-    int stat = 0; 
+    int serverAvailable = 0;
+    int stat = 0;
+    int priorityLocked = 0, prioritySock = -1;
 
     struct epoll_event epollConfig;
     struct epoll_event epollEventArray[MAX_EPOLL_EVENTS];
 
     int numOfNewEvents;
     int i, result;
+    uint32_t currentEvents = 0;
+
+    client_srv_t srv[MAX_CLIENT_SERVERS];
+    int s;
+    bzero(srv, sizeof(srv));
+    for(s = 0; s < MAX_CLIENT_SERVERS; s++)
+    {
+        srv[s].sock = -1;
+        srv[s].state = SRV_DISCONNECTED;
+    }
+    threadFD->clientSrv = srv;
 
     /////////////////////////
     /***** Serial Port *****/
@@ -772,7 +1091,7 @@ void *ClientThreadFunc(void *args)
         if (ioctl(threadFD->serialPort, TIOCSRS485, &rs485conf) < 0) {
             LOG("Can not set RS485 mode for %s", deviceConfig.deviceName);
         } else {
-            LOG("RS485 mode for %s is successfully set", deviceConfig.deviceName);
+            if(!deviceConfig.quiet) LOG("RS485 mode for %s is successfully set", deviceConfig.deviceName);
         }
     }
 
@@ -865,6 +1184,17 @@ void *ClientThreadFunc(void *args)
         pthread_exit(NULL);
     }
 
+    struct itimerspec priorityValue;
+    bzero(&priorityValue, sizeof(priorityValue));
+    priorityValue.it_value.tv_sec = deviceConfig.holdPriorityTime;
+
+    threadFD->priorityTimer = timerfd_create(CLOCK_MONOTONIC,TFD_NONBLOCK);
+    if(threadFD->priorityTimer < 0)
+    {
+        LOG("Error while timerfd create \n");
+        pthread_exit(NULL);
+    }
+
     ////////////////////////////
     /** Timer for TCP MODBUS **/
     ////////////////////////////
@@ -878,7 +1208,7 @@ void *ClientThreadFunc(void *args)
     bzero(&threadFD->mb_tcp.newValue,sizeof(struct itimerspec));
     threadFD->mb_tcp.newValue.it_value.tv_sec = 0;
     threadFD->mb_tcp.newValue.it_value.tv_nsec = pack_timeout*1000*10;
-    LOG("Timer set = %lu \n",threadFD->mb_tcp.newValue.it_value.tv_nsec);
+    if(!deviceConfig.quiet) LOG("Timer set = %lu \n",threadFD->mb_tcp.newValue.it_value.tv_nsec);
 
     threadFD->mb_tcp.timer = timerfd_create(CLOCK_MONOTONIC,TFD_NONBLOCK);
     if(threadFD->mb_tcp.timer < 0){
@@ -886,61 +1216,6 @@ void *ClientThreadFunc(void *args)
     	pthread_exit(NULL);
     }
 
-
-
-    /////////////////////////
-    /** Connect To Server **/
-    /////////////////////////
-    struct sockaddr_in addr;
-    struct hostent *server;
-
-    LOG("Trying to connect... \n");
-    while(1)
-    {
-        server = gethostbyname(deviceConfig.clientHost);
-        if (server == NULL) 
-        {
-            if (!deviceConfig.quiet)
-                LOG("Error while resolving %s\n", deviceConfig.clientHost);
-            sleep(FIRST_RECONN_TIMEOUT);
-            continue;
-        }
-
-        // server's internet address
-        bzero((char *) &addr, sizeof(addr));
-        addr.sin_family = AF_INET;
-        bcopy((char *)server->h_addr, (char *)&addr.sin_addr.s_addr, server->h_length);
-        addr.sin_port = htons(deviceConfig.clientPort);
-
-        threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-        if(threadFD->mainSocket < 0)
-        {
-            if (!deviceConfig.quiet)
-                LOG("Error while creating client socket \n");
-            sleep(FIRST_RECONN_TIMEOUT);
-            continue;
-        }
-
-        result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-        if(result == 0)
-        {
-            if (!deviceConfig.quiet)
-                LOG("Client connected successfully \n");
-            serverAvailable = 1;
-            if(timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue) < 0)
-            {
-                if (!deviceConfig.quiet)
-                    LOG("Error while timer setup \n");
-            }
-            break;
-        }
-        else
-        {
-            if (!deviceConfig.quiet)
-                LOG("Couldn't connect. Retry after %d sec \n", FIRST_RECONN_TIMEOUT);
-            sleep(FIRST_RECONN_TIMEOUT);
-        }
-    }
 
 
     /////////////////////////
@@ -956,6 +1231,14 @@ void *ClientThreadFunc(void *args)
     epollConfig.events = EPOLLIN | EPOLLET;
     epollConfig.data.fd = threadFD->TCPtimer;
     result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->TCPtimer, &epollConfig);
+    if(result < 0)
+    {
+        LOG("Error while timer epoll regisration\n");
+        pthread_exit(NULL);
+    }
+    epollConfig.events = EPOLLIN | EPOLLET;
+    epollConfig.data.fd = threadFD->priorityTimer;
+    result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->priorityTimer, &epollConfig);
     if(result < 0)
     {
         LOG("Error while timer epoll regisration\n");
@@ -979,15 +1262,64 @@ void *ClientThreadFunc(void *args)
         LOG("Error while serial port epoll regisration\n");
         pthread_exit(NULL);
     }
-    // add socket fd to epoll
-    epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-    epollConfig.data.fd = threadFD->mainSocket;
-    // add socket into epoll
-    result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-        if(result < 0)
+
+    /////////////////////////
+    /** Resolver Thread   **/
+    /////////////////////////
+    int resolverPair[2];
+    if(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, resolverPair) == 0)
     {
-        LOG("Error while socket epoll regisration\n");
-        pthread_exit(NULL);
+        pthread_t resolverThread;
+        pthread_attr_t resolverAttr;
+        int *resolverArg = malloc(sizeof(int));
+
+        if(resolverArg == NULL)
+        {
+            close(resolverPair[0]);
+            close(resolverPair[1]);
+        }
+        else
+        {
+            *resolverArg = resolverPair[1];
+            pthread_attr_init(&resolverAttr);
+            pthread_attr_setdetachstate(&resolverAttr, PTHREAD_CREATE_DETACHED);
+            if(pthread_create(&resolverThread, &resolverAttr, ResolverThreadFunc, resolverArg) != 0)
+            {
+                LOG("Error while creating resolver thread for dev %s\n", deviceConfig.deviceName);
+                free(resolverArg);
+                close(resolverPair[0]);
+                close(resolverPair[1]);
+            }
+            else
+            {
+                threadFD->resolverFd = resolverPair[0];
+                epollConfig.events = EPOLLIN;
+                epollConfig.data.fd = threadFD->resolverFd;
+                if(epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->resolverFd, &epollConfig) < 0)
+                    LOG("Error while resolver epoll regisration\n");
+            }
+            pthread_attr_destroy(&resolverAttr);
+        }
+    }
+    else
+        LOG("Error while creating resolver channel for dev %s\n", deviceConfig.deviceName);
+
+    /////////////////////////
+    /** Connect To Server **/
+    /////////////////////////
+    if(deviceConfig.serverCount < 1)
+        deviceConfig.serverCount = 1;
+
+    for(s = 0; s < deviceConfig.serverCount; s++)
+        StartConnect(threadFD->epollFD, threadFD->resolverFd, &srv[s], s,
+                     deviceConfig.clientHost[s], deviceConfig.clientPort[s], deviceConfig.quiet);
+
+    threadFD->mainSocket = srv[0].sock;
+    serverAvailable = (srv[0].state == SRV_CONNECTED);
+
+    if(timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue) < 0)
+    {
+        LOG("Error while timer setup \n");
     }
 
 
@@ -995,265 +1327,132 @@ void *ClientThreadFunc(void *args)
     {
         numOfNewEvents = epoll_wait(threadFD->epollFD, epollEventArray, MAX_EPOLL_EVENTS, EPOLL_RUN_TIMEOUT);
 
-        for(i = 0; i < numOfNewEvents; i++) 
+        for(i = 0; i < numOfNewEvents; i++)
         {
             eventSource = epollEventArray[i].data.fd;
+            currentEvents = epollEventArray[i].events;
+
+            if(currentEvents & (EPOLLOUT | EPOLLERR | EPOLLHUP))
+            {
+                int pending = -1;
+                for(s = 0; s < deviceConfig.serverCount; s++)
+                {
+                    if(srv[s].state == SRV_CONNECTING && srv[s].sock == eventSource)
+                    {
+                        pending = s;
+                        break;
+                    }
+                }
+                if(pending >= 0)
+                {
+                    FinishConnect(threadFD->epollFD, &srv[pending], deviceConfig.clientHost[pending],
+                                  deviceConfig.clientPort[pending], deviceConfig.quiet);
+                    if(pending == 0)
+                    {
+                        threadFD->mainSocket = srv[0].sock;
+                        serverAvailable = (srv[0].state == SRV_CONNECTED);
+                        if(serverAvailable)
+                            stat = 0;
+                    }
+                    continue;
+                }
+            }
+
+            if(currentEvents & EPOLLOUT)
+            {
+                for(s = 0; s < deviceConfig.serverCount; s++)
+                {
+                    if(srv[s].state == SRV_CONNECTED && srv[s].sock == eventSource && srv[s].txLen > 0)
+                    {
+                        FlushTx(threadFD->epollFD, &srv[s], deviceConfig.clientHost[s],
+                                deviceConfig.clientPort[s], deviceConfig.quiet);
+                        break;
+                    }
+                }
+            }
 
             // data from TCP connection
-            if(eventSource == threadFD->mainSocket)   
+            if(eventSource == threadFD->mainSocket)
             {
                 numOfReadBytes = recv(eventSource, dataBuffer, dataBufferSize, 0);
                 //LOG("incoming %d bytes\n", numOfReadBytes);
+                if(numOfReadBytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                    continue;
                 if(numOfReadBytes > 0)  // in case of normal packet
                 {
-                    // if we are autorized already OR we don't need autorization
-                    if(autorized == 1 || deviceConfig.clientAuth == 0)
+                    if(deviceConfig.clientAuth != 0 && !srv[0].authorized)
                     {
-                    	//TODO SETTING MODBUS
-                    	if(!deviceConfig.modbus_gateway){
+                        if(HandleAuth(&srv[0], deviceConfig.clientID, deviceConfig.clientHost[0],
+                                      deviceConfig.clientPort[0], dataBuffer, numOfReadBytes,
+                                      deviceConfig.quiet) < 0)
+                        {
+                            DropServer(threadFD->epollFD, &srv[0]);
+                            LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[0], deviceConfig.clientPort[0]);
+                            if(prioritySock == eventSource)
+                            {
+                                priorityLocked = 0;
+                                prioritySock = -1;
+                            }
+                            StartConnect(threadFD->epollFD, threadFD->resolverFd, &srv[0], 0, deviceConfig.clientHost[0],
+                                         deviceConfig.clientPort[0], deviceConfig.quiet);
+                            threadFD->mainSocket = srv[0].sock;
+                            serverAvailable = (srv[0].state == SRV_CONNECTED);
+                        }
+                        continue;
+                    }
+
+                    //TODO SETTING MODBUS
+                    if(!deviceConfig.modbus_gateway){
+                    	if(!priorityLocked || prioritySock == threadFD->mainSocket)
+                    	{
+                    		prioritySock = threadFD->mainSocket;
+                    		priorityLocked = 1;
+                    		timerfd_settime(threadFD->priorityTimer, 0, &priorityValue, NULL);
                     		write(threadFD->serialPort, dataBuffer, numOfReadBytes);
-                    	}else
-                        if(!SendModbusRTU(threadFD, dataBuffer, numOfReadBytes, deviceConfig.modbus_gateway, deviceConfig.quiet)){
-                        	// close existing connection
-                        	close(eventSource);
-                        	// remove from epoll
-                        	epollConfig.data.fd = eventSource;
-                        	epoll_ctl(threadFD->epollFD, EPOLL_CTL_DEL, eventSource, &epollConfig);
-                            if (!deviceConfig.quiet)
-                        	    LOG("Connection closed\n");
-
-                        	serverAvailable = 0;
-                        	autorized = 0;
-                        	// re-create socket
-                        	threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-                        	if(threadFD->mainSocket < 0)
-                        	{
-                                if (!deviceConfig.quiet)
-                        		    LOG("Error while re-opening client socket \n");
-                        	}
-
-                        	// add to epoll again
-                        	epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-                        	epollConfig.data.fd = threadFD->mainSocket;
-                        	result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-                        	if(result < 0)
-                        	{
-                                if (!deviceConfig.quiet)
-                        		    LOG("Error while socket epoll regisration\n");
-                        		pthread_exit(NULL);
-                        	}
-
-                        	result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-
-                        	// if connection is not successfull, restart timer
-                        	if(result != 0)
-                        	{
-                        		result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
-                        		if(result < 0)
-                        		{
-                                    if (!deviceConfig.quiet)
-                        			    LOG("Error while timer setup \n");
-                        		}
-                        	}
-                        	else
-                        	{
-                                if (!deviceConfig.quiet)
-                        		    LOG("Client re-connected successfully \n");
-                        		serverAvailable = 1;
-                        	}
-                        }
-                        //LOG("TCP -> Serial: %d bytes\n", numOfReadBytes);
-                        result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
-                        if(result < 0)
-                        {
-                            if (!deviceConfig.quiet)
-                                LOG("Error while timer setup \n");
-                        }
+                    	}
+                    }else{
+                    	if(priorityLocked && prioritySock != srv[0].sock)
+                    		continue;
+                    	if(prioritySock != srv[0].sock)
+                    		ResetModbusState(threadFD);
+                    	prioritySock = srv[0].sock;
+                    	priorityLocked = 1;
+                    	timerfd_settime(threadFD->priorityTimer, 0, &priorityValue, NULL);
+                    	threadFD->mb_tcp.sock = srv[0].sock;
+                    	if(!SendModbusRTU(threadFD, dataBuffer, numOfReadBytes, deviceConfig.modbus_gateway, deviceConfig.quiet)){
+                    		DropServer(threadFD->epollFD, &srv[0]);
+                    		LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[0], deviceConfig.clientPort[0]);
+                    		if(prioritySock == eventSource)
+                    		{
+                    			priorityLocked = 0;
+                    			prioritySock = -1;
+                    		}
+                    		StartConnect(threadFD->epollFD, threadFD->resolverFd, &srv[0], 0, deviceConfig.clientHost[0],
+                    		             deviceConfig.clientPort[0], deviceConfig.quiet);
+                    		threadFD->mainSocket = srv[0].sock;
+                    		serverAvailable = (srv[0].state == SRV_CONNECTED);
+                    	}
                     }
-                    else
-                    {
-                        // if it is an autorization request from server
-                        if (numOfReadBytes == 28)
-                        {
-                            if(memcmp(dataBuffer, authRequest, 28) == 0)
-                            {
-                                if (!deviceConfig.quiet)
-                                    LOG("Autorization request from server\n");
-                                numOfReadBytes = FormAuthAnswer(dataBuffer, deviceConfig.clientID);
-                                result=send(threadFD->mainSocket, dataBuffer, numOfReadBytes, MSG_NOSIGNAL); // maybe add some check???
-                                if (!result) {
-                                    LOG("Error %d while sending data\n", result);
-                                }
-                                dataBuffer[numOfReadBytes] = 0;
-                            }
-                            else if(memcmp(dataBuffer, authAcknow, 28) == 0)
-                            {
-                                autorized = 1;
-                                if (!deviceConfig.quiet)
-                                    LOG("Autorization OK \n");
-                            }
-                            else // error, reconnect
-                            {
-                                if (!deviceConfig.quiet)
-                                    LOG("Autorization ERROR. Reconnect... \n");
-
-                                // close existing connection
-                                close(eventSource);
-                                // remove from epoll
-                                epollConfig.data.fd = eventSource;
-                                epoll_ctl(threadFD->epollFD, EPOLL_CTL_DEL, eventSource, &epollConfig);
-                                if (!deviceConfig.quiet)
-                                    LOG("Connection closed by server\n");
-
-                                serverAvailable = 0;
-                                autorized = 0;
-                                // re-create socket
-                                threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-                                if(threadFD->mainSocket < 0)
-                                {
-                                    if (!deviceConfig.quiet)
-                                        LOG("Error while re-opening client socket \n");
-                                }
-
-                                // add to epoll again
-                                epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-                                epollConfig.data.fd = threadFD->mainSocket;
-                                result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-                                if(result < 0)
-                                {
-                                    if (!deviceConfig.quiet)
-                                        LOG("Error while socket epoll regisration\n");
-                                    pthread_exit(NULL);
-                                }
-
-                                result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-
-                                // if connection is not successfull, restart timer
-                                if(result != 0)
-                                {
-                                    result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
-                                    if(result < 0)
-                                    {
-                                        if (!deviceConfig.quiet)
-                                            LOG("Error while timer setup \n");
-                                    }
-                                }
-                                else
-                                {
-                                    if (!deviceConfig.quiet)
-                                        LOG("Client re-connected successfully \n");
-                                    serverAvailable = 1;
-                                }
-                            }
-                        }
-                        else // error, reconnect
-                        {
-                            if (!deviceConfig.quiet)
-                                LOG("Autorization ERROR. Reconnect... \n");
-
-                            // close existing connection
-                            close(eventSource);
-                            // remove from epoll
-                            epollConfig.data.fd = eventSource;
-                            epoll_ctl(threadFD->epollFD, EPOLL_CTL_DEL, eventSource, &epollConfig);
-                            if (!deviceConfig.quiet)
-                                LOG("Connection closed by server\n");
-
-                            serverAvailable = 0;
-                            autorized = 0;
-                            // re-create socket
-                            threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-                            if(threadFD->mainSocket < 0)
-                            {
-                                if (!deviceConfig.quiet)
-                                    LOG("Error while re-opening client socket \n");
-                            }
-
-                            // add to epoll again
-                            epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-                            epollConfig.data.fd = threadFD->mainSocket;
-                            result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-                            if(result < 0)
-                            {
-                                if (!deviceConfig.quiet)
-                                    LOG("Error while socket epoll regisration\n");
-                                pthread_exit(NULL);
-                            }
-
-                            result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-
-                            // if connection is not successfull, restart timer
-                            if(result != 0)
-                            {
-                                result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
-                                if(result < 0)
-                                {
-                                    if (!deviceConfig.quiet)
-                                        LOG("Error while timer setup \n");
-                                }
-                            }
-                            else
-                            {
-                                if (!deviceConfig.quiet)
-                                    LOG("Client re-connected successfully \n");
-                                serverAvailable = 1;
-                            }
-                        }
-                    }
+                    //LOG("TCP -> Serial: %d bytes\n", numOfReadBytes);
                 }
                 else // if server wants to close connection
-                {  
-                    // close existing connection
-                    close(eventSource);
-                    // remove from epoll
-                    epollConfig.data.fd = eventSource;
-                    epoll_ctl(threadFD->epollFD, EPOLL_CTL_DEL, eventSource, &epollConfig);
+                {
+                    DropServer(threadFD->epollFD, &srv[0]);
+                    if(prioritySock == eventSource)
+                    {
+                        priorityLocked = 0;
+                        prioritySock = -1;
+                    }
                     if (stat == 0)
-                        if (!deviceConfig.quiet)
-                            LOG("Connection closed by server\n");
+                        LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[0], deviceConfig.clientPort[0]);
                     stat = 1;
 
-                    serverAvailable = 0;
-                    autorized = 0;
-                    // re-create socket
-                    threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-                    if(threadFD->mainSocket < 0)
-                    {
-                        if (!deviceConfig.quiet)
-                            LOG("Error while re-opening client socket \n");
-                    }
-
-                    // add to epoll again
-                    epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-                    epollConfig.data.fd = threadFD->mainSocket;
-                    result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-                    if(result < 0)
-                    {
-                        if (!deviceConfig.quiet)
-                            LOG("Error while socket epoll regisration\n");
-                        pthread_exit(NULL);
-                    }
-
-                    result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-
-                    // if connection is not successfull, restart timer
-                    if(result != 0)
-                    {
-                        result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
-                        if(result < 0)
-                        {
-                            if (!deviceConfig.quiet)
-                                LOG("Error while timer setup \n");
-                        }
-                    }
-                    else
-                    {
-                        if (!deviceConfig.quiet)
-                            LOG("Client re-connected successfully \n");
-                        serverAvailable = 1;
+                    StartConnect(threadFD->epollFD, threadFD->resolverFd, &srv[0], 0, deviceConfig.clientHost[0],
+                                 deviceConfig.clientPort[0], deviceConfig.quiet);
+                    threadFD->mainSocket = srv[0].sock;
+                    serverAvailable = (srv[0].state == SRV_CONNECTED);
+                    if(serverAvailable)
                         stat = 0;
-                    }
-                    
                 }
             }
 
@@ -1261,18 +1460,25 @@ void *ClientThreadFunc(void *args)
             else if(eventSource == threadFD->serialPort)
             {
                 numOfReadBytes = read(threadFD->serialPort, dataBuffer, dataBufferSize);
-                if(serverAvailable == 1){
+                if(numOfReadBytes > 0){
                     //TODO SETTING MODBUS
                     if(deviceConfig.modbus_gateway == 1){
-                    	SendModbusTCP(threadFD, dataBuffer, numOfReadBytes, deviceConfig.quiet);
+                    	if(prioritySock >= 0)
+                    		SendModbusTCP(threadFD, dataBuffer, numOfReadBytes, deviceConfig.quiet);
                     }else
                     if(deviceConfig.modbus_gateway == 2){
-                    	threadFD->mb_tcp.sock = threadFD->mainSocket;
-                    	SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 0, deviceConfig.connection_mode, deviceConfig.quiet);
+                    	if(prioritySock >= 0)
+                    		SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 0, deviceConfig.connection_mode, deviceConfig.quiet);
                     }else {
-                    	result=send(threadFD->mainSocket, dataBuffer, numOfReadBytes, MSG_NOSIGNAL);
-                        if (!result) {
-                            LOG("Error %d while sending data\n", result);
+                        for(s = 0; s < deviceConfig.serverCount; s++)
+                        {
+                            if(!ServerReady(&srv[s], deviceConfig.clientAuth))
+                                continue;
+                            if(priorityLocked && srv[s].sock != prioritySock)
+                                continue;
+                            SendToServer(threadFD->epollFD, &srv[s], deviceConfig.clientHost[s],
+                                         deviceConfig.clientPort[s], dataBuffer, numOfReadBytes,
+                                         deviceConfig.quiet);
                         }
                     }
                 }
@@ -1280,76 +1486,170 @@ void *ClientThreadFunc(void *args)
             }
 
             // it's time to reconnect
-            else if(eventSource == threadFD->TCPtimer) 
+            else if(eventSource == threadFD->TCPtimer)
             {
-                if (!deviceConfig.quiet)
-                    LOG("Time to reconnect\n"); // !!!
+                uint64_t exp;
+                read(threadFD->TCPtimer, &exp, sizeof(exp));
 
-                // close existing connection
-                close(threadFD->mainSocket);
-                // remove from epoll
-                epollConfig.data.fd = threadFD->mainSocket;
-                epoll_ctl(threadFD->epollFD, EPOLL_CTL_DEL, threadFD->mainSocket, &epollConfig);
-                serverAvailable = 0;
-				autorized = 0;
-
-                // reconnect
-                threadFD->mainSocket = socket(AF_INET, SOCK_STREAM, 0);
-                if(threadFD->mainSocket < 0)
+                for(s = 0; s < deviceConfig.serverCount; s++)
                 {
-                    if (!deviceConfig.quiet)
-                        LOG("Error while re-opening client socket \n");
-                }
-
-                // add to epoll again
-                epollConfig.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
-                epollConfig.data.fd = threadFD->mainSocket;
-                result = epoll_ctl(threadFD->epollFD, EPOLL_CTL_ADD, threadFD->mainSocket, &epollConfig);
-                if(result < 0)
-                {
-                    if (!deviceConfig.quiet)
-                        LOG("Error while socket epoll regisration\n");
-                    pthread_exit(NULL);
-                }
-
-                result = connect(threadFD->mainSocket, (struct sockaddr *)&addr, sizeof(addr));
-                if(result != 0)
-                {
-                    if (!deviceConfig.quiet)
-                        LOG("Client re-connection failure\n"); // !!!
-                }
-                else
-                {
-                    if (!deviceConfig.quiet)
-                        LOG("Client re-connected successfully \n"); // !!!
-                    serverAvailable = 1;
+                    if(srv[s].state != SRV_DISCONNECTED)
+                        continue;
+                    StartConnect(threadFD->epollFD, threadFD->resolverFd, &srv[s], s,
+                                 deviceConfig.clientHost[s], deviceConfig.clientPort[s],
+                                 deviceConfig.quiet);
+                    if(s == 0)
+                    {
+                        threadFD->mainSocket = srv[0].sock;
+                        serverAvailable = (srv[0].state == SRV_CONNECTED);
+                    }
                 }
 
                 // restart timer
                 result = timerfd_settime(threadFD->TCPtimer, 0, &newValue, &oldValue);
                 if(result < 0)
                 {
-                    if (!deviceConfig.quiet)
-                        LOG("Error while timer setup \n");
+                    LOG("Error while timer setup \n");
                 }
             } else
             // timer modbus tcp for forming packets
             if(eventSource == threadFD->mb_tcp.timer){
-            	threadFD->mb_tcp.sock = threadFD->mainSocket;
-            	EndTimeoutModbusTCP(threadFD, 0, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet);
+            	if(prioritySock >= 0)
+            		EndTimeoutModbusTCP(threadFD, 0, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet);
+            }
+
+            else if(eventSource == threadFD->priorityTimer)
+            {
+                uint64_t exp;
+                read(threadFD->priorityTimer, &exp, sizeof(exp));
+                priorityLocked = 0;
+                prioritySock = -1;
+                if(deviceConfig.modbus_gateway)
+                    ResetModbusState(threadFD);
+                if (!deviceConfig.quiet)
+                    LOG("Priority hold time is up. Broadcast to all servers\n");
+            }
+
+            else if(eventSource == threadFD->resolverFd)
+            {
+                resolve_resp_t resp;
+
+                numOfReadBytes = read(threadFD->resolverFd, &resp, sizeof(resp));
+                if(numOfReadBytes != sizeof(resp))
+                    continue;
+                if(resp.index < 0 || resp.index >= deviceConfig.serverCount)
+                    continue;
+                if(srv[resp.index].state != SRV_RESOLVING)
+                    continue;
+
+                if(!resp.ok)
+                {
+                    srv[resp.index].state = SRV_DISCONNECTED;
+                    srv[resp.index].failCount++;
+                    LOG("Error while resolving %s\n", deviceConfig.clientHost[resp.index]);
+                    continue;
+                }
+
+                srv[resp.index].addr = resp.addr;
+                srv[resp.index].resolved = 1;
+                srv[resp.index].failCount = 0;
+                ConnectResolved(threadFD->epollFD, &srv[resp.index], deviceConfig.clientHost[resp.index],
+                                deviceConfig.clientPort[resp.index], deviceConfig.quiet);
+                if(resp.index == 0)
+                {
+                    threadFD->mainSocket = srv[0].sock;
+                    serverAvailable = (srv[0].state == SRV_CONNECTED);
+                    if(serverAvailable)
+                        stat = 0;
+                }
             }
 
             else
             {
-                if (!deviceConfig.quiet)
-                    LOG("Unknown epoll event\n");
+                int found = -1;
+                for(s = 1; s < deviceConfig.serverCount; s++)
+                {
+                    if(srv[s].state == SRV_CONNECTED && srv[s].sock == eventSource)
+                    {
+                        found = s;
+                        break;
+                    }
+                }
+                if(found >= 0)
+                {
+                    numOfReadBytes = recv(eventSource, dataBuffer, dataBufferSize, 0);
+                    if(numOfReadBytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                        continue;
+                    if(numOfReadBytes > 0)
+                    {
+                        if(deviceConfig.clientAuth != 0 && !srv[found].authorized)
+                        {
+                            if(HandleAuth(&srv[found], deviceConfig.clientID, deviceConfig.clientHost[found],
+                                          deviceConfig.clientPort[found], dataBuffer, numOfReadBytes,
+                                          deviceConfig.quiet) < 0)
+                            {
+                                DropServer(threadFD->epollFD, &srv[found]);
+                                if(prioritySock == eventSource)
+                                {
+                                    priorityLocked = 0;
+                                    prioritySock = -1;
+                                }
+                                LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[found], deviceConfig.clientPort[found]);
+                            }
+                            continue;
+                        }
+
+                        if(deviceConfig.modbus_gateway)
+                        {
+                            if(priorityLocked && prioritySock != eventSource)
+                                continue;
+                            if(prioritySock != eventSource)
+                                ResetModbusState(threadFD);
+                            prioritySock = eventSource;
+                            priorityLocked = 1;
+                            timerfd_settime(threadFD->priorityTimer, 0, &priorityValue, NULL);
+                            threadFD->mb_tcp.sock = eventSource;
+                            if(!SendModbusRTU(threadFD, dataBuffer, numOfReadBytes, deviceConfig.modbus_gateway, deviceConfig.quiet))
+                            {
+                                DropServer(threadFD->epollFD, &srv[found]);
+                                if(prioritySock == eventSource)
+                                {
+                                    priorityLocked = 0;
+                                    prioritySock = -1;
+                                }
+                                LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[found], deviceConfig.clientPort[found]);
+                            }
+                        }
+                        else if(!priorityLocked || prioritySock == eventSource)
+                        {
+                            prioritySock = eventSource;
+                            priorityLocked = 1;
+                            timerfd_settime(threadFD->priorityTimer, 0, &priorityValue, NULL);
+                            write(threadFD->serialPort, dataBuffer, numOfReadBytes);
+                        }
+                    }
+                    else
+                    {
+                        DropServer(threadFD->epollFD, &srv[found]);
+                        if(prioritySock == eventSource)
+                        {
+                            priorityLocked = 0;
+                            prioritySock = -1;
+                        }
+                        LOG("Connection closed: %s:%d\n", deviceConfig.clientHost[found], deviceConfig.clientPort[found]);
+                    }
+                }
+                else
+                {
+                    LOG("Unknown epoll event on fd %d\n", eventSource);
+                }
             }
-        }      
+        }
     }
 
     pthread_cleanup_pop(1);
     return (void *) 0;
-} 
+}
 
 char ByteToASCII(char x) {
 	x &= 0x0F;
@@ -1380,8 +1680,7 @@ int SendModbusRTU(struct fdStructType *threadFD,char *pBuf, int len, int ascii_r
 				if (!quiet)
                     LOG("Receive TCP modbus header len = %d\n", threadFD->state_rtu.len);
 				if(threadFD->state_rtu.len > MAX_PACK_SIZE || modbus_check_header(threadFD->state_rtu.header)){
-					if (!quiet)
-                        LOG("Header is damaged, drop connection\n");
+					LOG("Header is damaged, drop connection\n");
 					threadFD->state_rtu.state = 0;
 					return 0;
 				}
@@ -1402,7 +1701,7 @@ int SendModbusRTU(struct fdStructType *threadFD,char *pBuf, int len, int ascii_r
 			if(threadFD->state_rtu.offset >= threadFD->state_rtu.len){
 				modbus_crc_write((unsigned char *)threadFD->state_rtu.packet, threadFD->state_rtu.offset);
 				if (!quiet)
-                    LOG("Forming RTU modbus packet CRC\n", threadFD->state_rtu.len);
+                    LOG("Forming RTU modbus packet CRC len=%d\n", threadFD->state_rtu.len);
 				threadFD->state_rtu.offset += 2;
 				write(threadFD->serialPort, threadFD->state_rtu.packet, threadFD->state_rtu.offset);
 				if (!quiet)    
@@ -1583,8 +1882,7 @@ void SendModbusTCP(struct fdStructType *threadFD,char *pBuf, int len, int quiet)
 	result = timerfd_settime(pTCP->timer, 0, &pTCP->newValue, &oldValue);
 	if(result < 0)
 	{
-        if (!quiet)
-		    LOG("Error while timer setup \n");
+        LOG("Error while timer setup \n");
 	}
 	;
 }
@@ -1650,13 +1948,13 @@ void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int asci
 // WARNING: indian code detected!!!
 device_config_t GetFullDeviceConfig(int deviceID)
 {
-    LOG("Reading settings of ID %d \n", deviceID);
-
     char *STRING_DISABLED = "disabled";
     char *STRING_SERVER = "server";
     char *STRING_CLIENT = "client";
 
     device_config_t deviceConfig = {0};
+    deviceConfig.deviceID = deviceID;
+    SetLogTag(deviceID);
 
     // maybe use malloc? what about overhead?
     char UCIpathBegin[MAX_CHARS_IN_UCIPATH] = "pollmydevice.";
@@ -1671,8 +1969,8 @@ device_config_t GetFullDeviceConfig(int deviceID)
     char UCIpathServerPort[MAX_CHARS_IN_UCIPATH]    = ".server_port";
     char UCIpathConnectionMode[MAX_CHARS_IN_UCIPATH]  = ".connection_mode";
     char UCIpathHoldConnTime[MAX_CHARS_IN_UCIPATH]  = ".holdconntime";
-    char UCIpathClientHost[MAX_CHARS_IN_UCIPATH]    = ".client_host";
-    char UCIpathClientPort[MAX_CHARS_IN_UCIPATH]    = ".client_port";
+    char UCIpathClientServer[MAX_CHARS_IN_UCIPATH]  = ".client_server";
+    char UCIpathClientHoldPriority[MAX_CHARS_IN_UCIPATH] = ".client_hold_priority";
     char UCIpathClientAuth[MAX_CHARS_IN_UCIPATH]    = ".client_auth";
     char UCIpathClientTimeout[MAX_CHARS_IN_UCIPATH] = ".client_timeout";
     char UCIpathClientID[MAX_CHARS_IN_UCIPATH]      = ".client_id";
@@ -1692,6 +1990,16 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if(!UCIcontext) 
         return deviceConfig;
 
+    // quiet mode (read first so debug logs below are gated by it)
+    memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
+    strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
+    strncat(UCIpath, UCIpathQuiet, TMP_PATH_LENGTH);
+    uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true);
+    if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
+        deviceConfig.quiet = atoi(UCIptr.o->v.string);
+
+    if(!deviceConfig.quiet) LOG("Reading settings of ID %d \n", deviceID);
+
     // mode
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);           // UCIpath = UCIpathBegin = "pollmydevice."
     strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);       // UCIpath + (char)i
@@ -1699,7 +2007,6 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathMode);
         return deviceConfig;
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
@@ -1721,10 +2028,10 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathDeviceName);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathDeviceName);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
-        memcpy(deviceConfig.deviceName, UCIptr.o->v.string, sizeof(deviceConfig.deviceName));
+        strncpy(deviceConfig.deviceName, UCIptr.o->v.string, sizeof(deviceConfig.deviceName)-1);
 
     // baudrate
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
@@ -1733,7 +2040,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathBaudRate);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathBaudRate);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.baudRate = atoi(UCIptr.o->v.string);
@@ -1745,7 +2052,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathBytesize);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathBytesize);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.byteSize = atoi(UCIptr.o->v.string);
@@ -1757,7 +2064,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathParity);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathParity);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
     {
@@ -1776,7 +2083,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathFlowControl);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathFlowControl);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
     {
@@ -1795,7 +2102,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathStopBits);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathStopBits);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.stopBits = atoi(UCIptr.o->v.string);
@@ -1807,7 +2114,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathServerPort);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathServerPort);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.serverPort = atoi(UCIptr.o->v.string);
@@ -1818,7 +2125,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathConnectionMode);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathConnectionMode);
         deviceConfig.connection_mode = 0;
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
@@ -1831,37 +2138,62 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathHoldConnTime);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathHoldConnTime);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.holdConnTime = atoi(UCIptr.o->v.string);
     if(deviceConfig.holdConnTime==0){
-        LOG("Connection hold time not set. Set value to 60 sec\n");
+        if(!deviceConfig.quiet) LOG("Connection hold time not set. Set value to 60 sec\n");
         deviceConfig.holdConnTime = 60;
     }
-    // client_host
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
     strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
-    strncat(UCIpath, UCIpathClientHost, TMP_PATH_LENGTH);
+    strncat(UCIpath, UCIpathClientServer, TMP_PATH_LENGTH);
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
-        (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
+        (UCIptr.o==NULL))
     {
-        LOG("No UCI field %s \n", UCIpathClientHost);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathClientServer);
     }
-    if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
-        memcpy(deviceConfig.clientHost, UCIptr.o->v.string, sizeof(deviceConfig.clientHost));
+    else if((UCIptr.flags & UCI_LOOKUP_COMPLETE) && UCIptr.o->type == UCI_TYPE_LIST)
+    {
+        struct uci_element *serverElement;
+        int serverIdx = 0;
+        uci_foreach_element(&UCIptr.o->v.list, serverElement)
+        {
+            if(serverIdx >= MAX_CLIENT_SERVERS)
+                break;
+            if(serverElement->name == NULL)
+                continue;
+            char *portSep = strrchr(serverElement->name, ':');
+            if(portSep == NULL)
+                continue;
+            int hostLen = portSep - serverElement->name;
+            if(hostLen <= 0 || hostLen >= DOMAIN_NAME_LENGTH)
+                continue;
+            bzero(deviceConfig.clientHost[serverIdx], DOMAIN_NAME_LENGTH);
+            memcpy(deviceConfig.clientHost[serverIdx], serverElement->name, hostLen);
+            deviceConfig.clientPort[serverIdx] = atoi(portSep + 1);
+            serverIdx++;
+        }
+        if(serverIdx > 0)
+            deviceConfig.serverCount = serverIdx;
+        if(!deviceConfig.quiet) LOG("Parsed %d server(s) from list for dev %d\n", serverIdx, deviceID);
+    }
 
-    // client_port
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
     strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
-    strncat(UCIpath, UCIpathClientPort, TMP_PATH_LENGTH);
+    strncat(UCIpath, UCIpathClientHoldPriority, TMP_PATH_LENGTH);
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
-        (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
+        (UCIptr.o==NULL || UCIptr.o->v.string==NULL))
     {
-        LOG("No UCI field %s \n", UCIpathClientPort);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathClientHoldPriority);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
-        deviceConfig.clientPort = atoi(UCIptr.o->v.string);
+        deviceConfig.holdPriorityTime = atoi(UCIptr.o->v.string);
+    if(deviceConfig.holdPriorityTime==0){
+        if(!deviceConfig.quiet) LOG("Priority hold time not set. Set value to 60 sec\n");
+        deviceConfig.holdPriorityTime = 60;
+    }
 
     // client_auth
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
@@ -1870,7 +2202,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathClientAuth);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathClientAuth);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.clientAuth = atoi(UCIptr.o->v.string);
@@ -1882,13 +2214,17 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
         (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
     {
-        LOG("No UCI field %s \n", UCIpathClientTimeout);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathClientTimeout);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
         deviceConfig.clientTimeout = atoi(UCIptr.o->v.string);
+    if(deviceConfig.clientTimeout==0){
+        if(!deviceConfig.quiet) LOG("Client reconnection timeout not set. Set value to 60 sec\n");
+        deviceConfig.clientTimeout = 60;
+    }
 
     FILE * pFuseFile;
-    char * serialNum = malloc(IMEI_LENGTH);
+    char * serialNum = malloc(IMEI_LENGTH + 1);
 
     char serialNumPath[256];
     snprintf(serialNumPath, sizeof(serialNumPath), "/tmp/pollmydevice/client_id%d", deviceID);
@@ -1908,7 +2244,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
         else
         {
             deviceConfig.clientID = strtoll(serialNum, NULL, 10);
-            LOG("S/N dev %d = %lld\n", deviceID, deviceConfig.clientID);
+            if(!deviceConfig.quiet) LOG("S/N dev %d = %lld\n", deviceID, deviceConfig.clientID);
         }
         fclose(pFuseFile);
     }
@@ -1922,22 +2258,10 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
     		(UCIptr.o==NULL || UCIptr.o->v.string==NULL))
     {
-    	LOG("No UCI field %s \n", UCIpathModbusGateway);
+    	if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathModbusGateway);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
     	deviceConfig.modbus_gateway = atoi(UCIptr.o->v.string);
-
-    // quiet mode
-    memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
-    strncat(UCIpath, UCIpathNumber, MAX_DIGITS_IN_DEV_NUM-2);
-    strncat(UCIpath, UCIpathQuiet, TMP_PATH_LENGTH);
-    if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
-        (UCIptr.o==NULL || UCIptr.o->v.string==NULL)) 
-    {
-        LOG("No UCI field %s \n", UCIpathQuiet);
-    }
-    if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
-        deviceConfig.quiet = atoi(UCIptr.o->v.string);
 
     // pack_timeout
     memcpy(UCIpath , UCIpathBegin, MAX_CHARS_IN_UCIPATH);
@@ -1946,7 +2270,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
     		(UCIptr.o==NULL || UCIptr.o->v.string==NULL))
     {
-    	LOG("No UCI field %s \n", UCIpathPackTimeout);
+    	if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathPackTimeout);
         deviceConfig.timeout_pack=0;
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
@@ -1959,7 +2283,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
     		(UCIptr.o==NULL || UCIptr.o->v.string==NULL))
     {
-    	LOG("No UCI field %s \n", UCIpathPackSize);
+    	if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathPackSize);
         deviceConfig.size_pack=0;
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE)
@@ -1972,7 +2296,7 @@ device_config_t GetFullDeviceConfig(int deviceID)
     if ((uci_lookup_ptr(UCIcontext, &UCIptr, UCIpath, true) != UCI_OK)||
             (UCIptr.o==NULL || UCIptr.o->v.string==NULL))
     {
-        LOG("No UCI field %s \n", UCIpathRS485Mode);
+        if(!deviceConfig.quiet) LOG("No UCI field %s \n", UCIpathRS485Mode);
     }
     if(UCIptr.flags & UCI_LOOKUP_COMPLETE) {
         deviceConfig.rs485_mode = atoi(UCIptr.o->v.string);
@@ -1990,8 +2314,8 @@ int FormAuthAnswer(char *dataBuffer, long long int clientID)
 
     memset(dataBuffer,0, 80);
 
-    char stringClientID[15];
-    sprintf(stringClientID, "%lld", clientID); // to string
+    char stringClientID[IMEI_LENGTH + 1] = {0};
+    snprintf(stringClientID, sizeof(stringClientID), "%lld", clientID); // to string
 
     dataBuffer[0] = 0xC0;
     dataBuffer[1] = 0x00;

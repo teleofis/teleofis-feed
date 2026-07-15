@@ -5,7 +5,7 @@ LUCI_DEPENDS:= +pollmydevice
 
 PKG_VERSION:=1.0
 
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 LUCI_TITLE:=LuCI TCP to RS232 and RS485 Configuration Frontend
 
