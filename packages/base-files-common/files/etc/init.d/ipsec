@@ -82,6 +82,9 @@ secret_xappend() {
 }
 
 firewall_reset() {
+	if [ "$(tail -c 1 ${FIREWALL_FILE} | wc -l)" -eq 0 ]; then
+		echo "" >> "${FIREWALL_FILE}"
+	fi
 	echo "${FIREWALL_VAR_FILE}" >> "${FIREWALL_FILE}"
 }
 
