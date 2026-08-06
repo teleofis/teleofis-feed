@@ -177,8 +177,8 @@ uint16_t Crc16Block(uint8_t* block, uint16_t len);
 //Modbus
 int SendModbusRTU(struct fdStructType *threadFD,char *pBuf, int len, int ascii_rtu, int quiet);
 void SendModbusTCP(struct fdStructType *threadFD,char *pBuf, int len, int quiet);
-void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uint8_t server, uint8_t connection_mode, int quiet);
-void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet);
+void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uint8_t server, uint8_t connection_mode, int quiet, const device_config_t *cfg, int prioritySock);
+void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet, const device_config_t *cfg, int prioritySock);
 void ClearModbus(struct fdStructType *threadFD);
 void send_all(const void *dataBuffer, size_t numOfReadBytes, int flags);
 static void *ResolverThreadFunc(void *args);
@@ -190,6 +190,7 @@ static void UpdateEpollTx(int epollFD, client_srv_t *srv);
 static void SendToServer(int epollFD, client_srv_t *srv, const char *host, int port, const char *data, int len, int quiet);
 static void FlushTx(int epollFD, client_srv_t *srv, const char *host, int port, int quiet);
 static int ServerReady(const client_srv_t *srv, int clientAuth);
+static void SendModbusToServers(struct fdStructType *threadFD, const device_config_t *cfg, int prioritySock, const char *data, int len);
 static int HandleAuth(client_srv_t *srv, long long int clientID, const char *host, int port, char *dataBuffer, int numOfReadBytes, int quiet);
 static void ResetModbusState(struct fdStructType *threadFD);
 
@@ -543,6 +544,26 @@ static int ServerReady(const client_srv_t *srv, int clientAuth)
     if(clientAuth != 0 && !srv->authorized)
         return 0;
     return 1;
+}
+
+static void SendModbusToServers(struct fdStructType *threadFD, const device_config_t *cfg, int prioritySock, const char *data, int len)
+{
+    int s;
+
+    if(threadFD == NULL || cfg == NULL || threadFD->clientSrv == NULL || len <= 0)
+        return;
+
+    for(s = 0; s < cfg->serverCount; s++)
+    {
+        if(!ServerReady(&threadFD->clientSrv[s], cfg->clientAuth))
+            continue;
+        if(prioritySock >= 0 && threadFD->clientSrv[s].sock != prioritySock)
+            continue;
+        SendToServer(threadFD->epollFD, &threadFD->clientSrv[s], cfg->clientHost[s],
+                     cfg->clientPort[s], data, len, cfg->quiet);
+        if(!cfg->quiet)
+            LOG("Send TCP modbus data len=%d to %s:%d\n", len, cfg->clientHost[s], cfg->clientPort[s]);
+    }
 }
 
 static int HandleAuth(client_srv_t *srv, long long int clientID, const char *host, int port, char *dataBuffer, int numOfReadBytes, int quiet)
@@ -899,7 +920,7 @@ void *ServerThreadFunc(void *args)
                         if (!deviceConfig.quiet)
                 		    LOG("Receive modbus ASCII data %d\n", numOfReadBytes);
                 		threadFD->mb_tcp.sock = lastActiveConnSocket;
-                		SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 1, deviceConfig.connection_mode, deviceConfig.quiet);
+                		SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 1, deviceConfig.connection_mode, deviceConfig.quiet, NULL, -1);
                 	}else{
                         if (!deviceConfig.quiet)
                 		    LOG("Receive modbus RTU data %d\n", numOfReadBytes);
@@ -920,7 +941,7 @@ void *ServerThreadFunc(void *args)
             // timer modbus tcp for forming packets
 			if(eventSource == threadFD->mb_tcp.timer){
 				threadFD->mb_tcp.sock = lastActiveConnSocket;
-				EndTimeoutModbusTCP(threadFD, 1, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet);
+				EndTimeoutModbusTCP(threadFD, 1, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet, NULL, -1);
 			}
 
             else if(eventSource == threadFD->TCPtimer)
@@ -1463,12 +1484,10 @@ void *ClientThreadFunc(void *args)
                 if(numOfReadBytes > 0){
                     //TODO SETTING MODBUS
                     if(deviceConfig.modbus_gateway == 1){
-                    	if(prioritySock >= 0)
-                    		SendModbusTCP(threadFD, dataBuffer, numOfReadBytes, deviceConfig.quiet);
+                    	SendModbusTCP(threadFD, dataBuffer, numOfReadBytes, deviceConfig.quiet);
                     }else
                     if(deviceConfig.modbus_gateway == 2){
-                    	if(prioritySock >= 0)
-                    		SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 0, deviceConfig.connection_mode, deviceConfig.quiet);
+                    	SendModbusASCIItoTCP(threadFD, dataBuffer, numOfReadBytes, 0, deviceConfig.connection_mode, deviceConfig.quiet, &deviceConfig, prioritySock);
                     }else {
                         for(s = 0; s < deviceConfig.serverCount; s++)
                         {
@@ -1514,8 +1533,7 @@ void *ClientThreadFunc(void *args)
             } else
             // timer modbus tcp for forming packets
             if(eventSource == threadFD->mb_tcp.timer){
-            	if(prioritySock >= 0)
-            		EndTimeoutModbusTCP(threadFD, 0, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet);
+            	EndTimeoutModbusTCP(threadFD, 0, deviceConfig.modbus_gateway, deviceConfig.connection_mode, deviceConfig.quiet, &deviceConfig, prioritySock);
             }
 
             else if(eventSource == threadFD->priorityTimer)
@@ -1756,7 +1774,7 @@ void InsertByteModbusTCP(t_mb_tcp *pTCP, char symbole){
 	pTCP->offset++;
 	return;
 }
-void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uint8_t server, uint8_t connection_mode, int quiet){
+void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uint8_t server, uint8_t connection_mode, int quiet, const device_config_t *cfg, int prioritySock){
 	int count=0;
 	uint32_t i;
 	uint8_t calculate_crc=0;
@@ -1829,17 +1847,13 @@ void SendModbusASCIItoTCP(struct fdStructType *threadFD,char *pBuf, int len, uin
                         } else {
                             send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
                         }
+                        if (!quiet)
+                            LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
                     }
 					else
                     {
-						pTCP->packet[1]++;		//Increment ID packet
-						result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
-                        if (!result) {
-                            LOG("Error %d while sending data\n", result);
-                        }
+						SendModbusToServers(threadFD, cfg, prioritySock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE);
 					}
-				if (!quiet)
-                    LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
 				}else{
 
 				}
@@ -1887,7 +1901,7 @@ void SendModbusTCP(struct fdStructType *threadFD,char *pBuf, int len, int quiet)
 	;
 }
 
-void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet){
+void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int ascii_rtu, uint8_t connection_mode, int quiet, const device_config_t *cfg, int prioritySock){
 	int result = 0;
     uint16_t crc1, crc2;
 	uint8_t low_byte, high_byte;
@@ -1931,15 +1945,11 @@ void EndTimeoutModbusTCP(struct fdStructType *threadFD, uint8_t server, int asci
             } else {
                 send_all(pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
             }
+            if (!quiet)
+                LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
         } else {
-			pTCP->packet[1]++;		//Increment ID packet
-			result=send(pTCP->sock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE, MSG_NOSIGNAL);
-            if (!result) {
-                LOG("Error %d while sending data\n", result);
-            }
+			SendModbusToServers(threadFD, cfg, prioritySock, pTCP->packet, pTCP->offset + MB_TCP_HEADER_SIZE);
 		}
-	    if (!quiet)	    
-        	LOG("Send TCP modbus data len=%d, mode=%d, sock=%d\n",pTCP->offset+MB_TCP_HEADER_SIZE, server, pTCP->sock);
 	}
 	pTCP->offset = 0;
 }
