@@ -1,0 +1,25 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+set_commands() {
+	local dev oc_on n
+
+	config_get oc_on "$1" oc_on
+	[ -n "$oc_on" ] && return
+	config_get dev "$1" dev
+	case "$dev" in
+		adc[0-9]*) n="${dev#adc}" ;;
+		*) return ;;
+	esac
+	uci set iolines."$1".oc_on="echo high > /dev/pd$n/direction"
+	uci set iolines."$1".oc_off="echo low > /dev/pd$n/direction"
+	uci set iolines."$1".dc_on="echo low > /dev/pu$n/direction"
+	uci set iolines."$1".dc_off="echo in > /dev/pu$n/direction"
+}
+
+config_load iolines
+config_foreach set_commands io
+uci commit iolines
+
+exit 0

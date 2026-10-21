@@ -1,3 +1,9 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-app-iolines\n"
+"Language: en\n"
+
 msgid "ADC input: voltage measurement.<br />Dry contact input: when turned on, the analog input of the router is connected to +5V voltage via a pull-up resistor. The pull-up is required to ensure the correct operation of the dry contact input.<br />Open collector: open collector output is set into the active state."
 msgstr "ADC input: voltage measurement.<br />Dry contact input: when turned on, the analog input of the router is connected to +5V voltage via a pull-up resistor. The pull-up is required to ensure the correct operation of the dry contact input.<br />Open collector: open collector output is set into the active state."
 
@@ -24,3 +30,33 @@ msgstr "Open collector (OC)"
 
 msgid "Universal I/O lines"
 msgstr "Universal I/O lines"
+
+msgid "Monitoring"
+msgstr "Monitoring"
+
+msgid "Threshold, mV"
+msgstr "Threshold, mV"
+
+msgid "Hysteresis, mV"
+msgstr "Hysteresis, mV"
+
+msgid "Edge"
+msgstr "Edge"
+
+msgid "Both"
+msgstr "Both"
+
+msgid "Rising"
+msgstr "Rising"
+
+msgid "Falling"
+msgstr "Falling"
+
+msgid "Command"
+msgstr "Command"
+
+msgid "Poll interval, ms"
+msgstr "Poll interval, ms"
+
+msgid "Monitoring: the command is run every time the measured value crosses the threshold, with the variables IO_NAME, IO_LINE, IO_PATH, IO_EDGE, IO_MODE, IO_VALUE, IO_RAW, IO_THRESHOLD and IO_HYSTERESIS. The line goes to the above state only once the value rises over the threshold plus the hysteresis, and back to the below state only once it drops under the threshold minus the hysteresis, so noise around the threshold does not produce an event on every sample. The edge selects which crossings run the command: rising (the line goes above), falling (the line goes back below) or both."
+msgstr "Monitoring: the command is run every time the measured value crosses the threshold, with the variables IO_NAME, IO_LINE, IO_PATH, IO_EDGE, IO_MODE, IO_VALUE, IO_RAW, IO_THRESHOLD and IO_HYSTERESIS. The line goes to the above state only once the value rises over the threshold plus the hysteresis, and back to the below state only once it drops under the threshold minus the hysteresis, so noise around the threshold does not produce an event on every sample. The edge selects which crossings run the command: rising (the line goes above), falling (the line goes back below) or both."

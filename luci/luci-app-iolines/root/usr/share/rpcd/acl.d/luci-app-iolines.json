@@ -4,7 +4,11 @@
 		"read": {
 			"uci": [ "iolines" ],
 			"ubus": {
-				"iolines": [ "voltage", "adc"]
+				"iolines": [ "raw", "voltage", "resist" ],
+				"file": [ "exec" ]
+			},
+			"file": {
+				"/sbin/iolinesd -c /var/etc/iolinesd.conf -t": [ "exec" ]
 			}
 		},
 		"write": {

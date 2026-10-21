@@ -3,7 +3,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=iolines-lt70
 PKG_VERSION:=1
-PKG_RELEASE:=0
+PKG_RELEASE:=1
 PKG_BUILD_DIR:=$(BUILD_DIR)/iolines-lt70
 
 include $(INCLUDE_DIR)/package.mk
@@ -12,7 +12,7 @@ define Package/iolines-lt70
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Network interface watchdog
-  DEPENDS:=
+  DEPENDS:=+iolinesd
 endef
 
 define Package/iolines-lt70/description
@@ -28,12 +28,19 @@ endef
 define Build/Compile
 endef
 
+define Package/iolines-lt70/conffiles
+/etc/config/iolines
+endef
+
 define Package/iolines-lt70/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(CP) ./files/iolines.config $(1)/etc/config/iolines
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/iolines.init $(1)/etc/init.d/iolines
-	$(INSTALL_BIN) ./files/iolines-boot.init $(1)/etc/init.d/iolines-boot
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./files/iolines.defaults $(1)/etc/uci-defaults/20_iolines
+	$(INSTALL_BIN) ./files/iolines-source.defaults $(1)/etc/uci-defaults/21_iolines-source
+	$(INSTALL_BIN) ./files/iolines-commands.defaults $(1)/etc/uci-defaults/22_iolines-commands
 endef
 
 $(eval $(call BuildPackage,iolines-lt70))

@@ -1,0 +1,20 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+set_source() {
+	local dev source
+
+	config_get source "$1" source
+	[ -n "$source" ] && return
+	config_get dev "$1" dev
+	case "$dev" in
+		adc[0-9]*) uci set iolines."$1".source="/sys/bus/iio/devices/iio:device0/in_voltage${dev#adc}_raw" ;;
+	esac
+}
+
+config_load iolines
+config_foreach set_source io
+uci commit iolines
+
+exit 0

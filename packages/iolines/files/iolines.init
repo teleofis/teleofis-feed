@@ -1,63 +1,15 @@
 #!/bin/sh /etc/rc.common
 
 START=50
+USE_PROCD=1
 
-load_iolines_boot() {	
+. /usr/share/iolinesd/iolinesd.sh
 
-	config_get dev "$1" "dev"
-	
-	num=$(echo ${dev:3:1})
-	pu="/dev/pu$num"
-	pd="/dev/pd$num"
-	
-	config_get mode "$1" "mode"
-	config_get enabled "$1" "enabled" "0"
-	if [ $enabled -eq 1 ]; then
-		case "$mode" in
-			"mode1")
-				echo in > $pu/direction
-				echo low > $pd/direction
-				;;
-			"mode2")
-				echo low > $pu/direction
-				echo low > $pd/direction
-				;;
-			"mode3")
-				echo high > $pu/direction
-				echo high > $pd/direction
-				;;
-		esac		
-	else
-		echo in > $pu/direction
-		echo low > $pd/direction
-	fi
-}
+set_scale() {
+	local scale
 
-load_iolines() {	
-
-	config_get dev "$1" "dev"
-	
-	num=$(echo ${dev:3:1})
-	pu="/dev/pu$num"
-	pd="/dev/pd$num"
-	
-	config_get mode "$1" "mode"
-		
-	case "$mode" in
-		"mode1")
-			echo in > $pu/direction
-			echo low > $pd/direction
-			;;
-		"mode2")
-			echo low > $pu/direction
-			echo low > $pd/direction
-			;;
-		"mode3")
-			echo high > $pu/direction
-			echo high > $pd/direction
-			;;
-	esac		
-
+	config_get scale "$1" scale
+	[ "$scale" = "$SCALE" ] || uci set iolines."$1".scale="$SCALE"
 }
 
 boot() {
@@ -75,6 +27,7 @@ boot() {
 
 	if [ "$BOARD" -gt "600" -a "$BOARD" -lt "900" ]; then
 		echo v4 > /tmp/sysinfo/hw
+		SCALE=8.219
 		ln -s /sys/class/gpio/gpio51 /dev/pu3
 		ln -s /sys/class/gpio/gpio50 /dev/pd3
 		ln -s /sys/class/gpio/gpio54 /dev/pu2
@@ -89,6 +42,7 @@ boot() {
 		ln -s /sys/bus/iio/devices/iio\:device0/in_voltage6_raw /dev/io0
 	else
 		echo v2 > /tmp/sysinfo/hw
+		SCALE=4.365
 		ln -s /sys/class/gpio/gpio51 /dev/pu0
 		ln -s /sys/class/gpio/gpio50 /dev/pd0
 		ln -s /sys/class/gpio/gpio54 /dev/pu1
@@ -103,10 +57,31 @@ boot() {
 		ln -s /sys/bus/iio/devices/iio\:device0/in_voltage6_raw /dev/io3
 	fi
 	config_load iolines
-	config_foreach load_iolines_boot io
+	config_foreach set_scale io
+	[ -n "$(uci changes iolines)" ] && uci commit iolines
+	start "$@"
+}
+
+start_service() {
+	config_load iolines
+	iolinesd_generate_conf
+
+	procd_open_instance iolinesd
+	procd_set_param command "$IOLINESD_PROG" -c "$IOLINESD_CONF"
+	procd_set_param respawn ${respawn_threshold:-360} ${respawn_timeout:-5} ${respawn_retry:-0}
+	procd_close_instance
+}
+
+reload_service() {
+	config_load iolines
+	iolinesd_generate_conf
+	procd_send_signal iolines iolinesd HUP
 }
 
 restart() {
-	config_load iolines
-	config_foreach load_iolines io
+	reload
+}
+
+service_triggers() {
+	procd_add_reload_trigger 'iolines'
 }

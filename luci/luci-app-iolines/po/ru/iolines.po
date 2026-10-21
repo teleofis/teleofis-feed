@@ -1,3 +1,9 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-app-iolines\n"
+"Language: ru\n"
+
 msgid "ADC input: voltage measurement.<br />Dry contact input: when turned on, the analog input of the router is connected to +5V voltage via a pull-up resistor. The pull-up is required to ensure the correct operation of the dry contact input.<br />Open collector: open collector output is set into the active state."
 msgstr "АЦП: измерение напряжения.<br />Сухой контакт: При включении аналоговый вход роутера с помощью резистора подтягивается к напряжению 5В. Подтяжка необходима для правильного функционирования аналогового входа в режиме сухой контакт.<br />Открытый коллектор: устанавливается активный уровень на выходе открытый коллектор."
 
@@ -24,3 +30,33 @@ msgstr "Открытый коллектор"
 
 msgid "Universal I/O lines"
 msgstr "Универсальные линии ввода-вывода"
+
+msgid "Monitoring"
+msgstr "Мониторинг"
+
+msgid "Threshold, mV"
+msgstr "Порог, мВ"
+
+msgid "Hysteresis, mV"
+msgstr "Гистерезис, мВ"
+
+msgid "Edge"
+msgstr "Фронт"
+
+msgid "Both"
+msgstr "Оба"
+
+msgid "Rising"
+msgstr "Нарастающий"
+
+msgid "Falling"
+msgstr "Спадающий"
+
+msgid "Command"
+msgstr "Команда"
+
+msgid "Poll interval, ms"
+msgstr "Период опроса, мс"
+
+msgid "Monitoring: the command is run every time the measured value crosses the threshold, with the variables IO_NAME, IO_LINE, IO_PATH, IO_EDGE, IO_MODE, IO_VALUE, IO_RAW, IO_THRESHOLD and IO_HYSTERESIS. The line goes to the above state only once the value rises over the threshold plus the hysteresis, and back to the below state only once it drops under the threshold minus the hysteresis, so noise around the threshold does not produce an event on every sample. The edge selects which crossings run the command: rising (the line goes above), falling (the line goes back below) or both."
+msgstr "Мониторинг: команда запускается при каждом пересечении измеренным значением порога, с переменными IO_NAME, IO_LINE, IO_PATH, IO_EDGE, IO_MODE, IO_VALUE, IO_RAW, IO_THRESHOLD и IO_HYSTERESIS. Линия переходит в состояние above, только когда значение поднимется выше порога плюс гистерезис, и возвращается в below, только когда опустится ниже порога минус гистерезис, поэтому шум возле порога не даёт событие на каждом замере. Фронт определяет, на каких пересечениях запускается команда: нарастающий (линия перешла в above), спадающий (линия вернулась в below) или оба."
