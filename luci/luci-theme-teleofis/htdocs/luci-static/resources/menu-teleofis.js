@@ -3,13 +3,13 @@
 'require ui';
 
 return baseclass.extend({
-	__init__: function() {
+	__init__() {
 		ui.menu.load().then(L.bind(this.render, this));
 	},
 
-	render: function(tree) {
-		var node = tree,
-		    url = '';
+	render(tree) {
+		let node = tree;
+		let url = '';
 
 		this.renderModeMenu(tree);
 
@@ -22,33 +22,25 @@ return baseclass.extend({
 			if (node)
 				this.renderTabMenu(node, url);
 		}
-
-		document.addEventListener('poll-start', this.handleBodyMargin);
-		document.addEventListener('poll-stop', this.handleBodyMargin);
-		document.addEventListener('uci-new-changes', this.handleBodyMargin);
-		document.addEventListener('uci-clear-changes', this.handleBodyMargin);
-		window.addEventListener('resize', this.handleBodyMargin);
-
-		this.handleBodyMargin();
 	},
 
-	renderTabMenu: function(tree, url, level) {
-		var container = document.querySelector('#tabmenu'),
-		    ul = E('ul', { 'class': 'tabs' }),
-		    children = ui.menu.getChildren(tree),
-		    activeNode = null;
+	renderTabMenu(tree, url, level) {
+		const container = document.querySelector('#tabmenu');
+		const ul = E('ul', { 'class': 'tabs' });
+		const children = ui.menu.getChildren(tree);
+		let activeNode = null;
 
-		for (var i = 0; i < children.length; i++) {
-			var isActive = (L.env.dispatchpath[3 + (level || 0)] == children[i].name),
-			    activeClass = isActive ? ' active' : '',
-			    className = 'tabmenu-item-%s %s'.format(children[i].name, activeClass);
+		children.forEach(child => {
+			const isActive = (L.env.dispatchpath[3 + (level || 0)] == child.name);
+			const activeClass = isActive ? ' active' : '';
+			const className = 'tabmenu-item-%s %s'.format(child.name, activeClass);
 
 			ul.appendChild(E('li', { 'class': className }, [
-				E('a', { 'href': L.url(url, children[i].name) }, [ _(children[i].title) ] )]));
+				E('a', { 'href': L.url(url, child.name) }, [ _(child.title) ] )]));
 
 			if (isActive)
-				activeNode = children[i];
-		}
+				activeNode = child;
+		});
 
 		if (ul.children.length == 0)
 			return E([]);
@@ -62,57 +54,52 @@ return baseclass.extend({
 		return ul;
 	},
 
-	renderMainMenu: function(tree, url, level) {
-		var ul = level ? E('ul', { 'class': 'dropdown-menu' }) : document.querySelector('#topmenu'),
-		    children = ui.menu.getChildren(tree);
+	renderMainMenu(tree, url, level) {
+		const ul = level ? E('ul', { 'class': 'dropdown-menu' }) : document.querySelector('#topmenu');
+		const children = ui.menu.getChildren(tree);
 
 		if (children.length == 0 || level > 1)
 			return E([]);
 
-		for (var i = 0; i < children.length; i++) {
-			var submenu = this.renderMainMenu(children[i], url + '/' + children[i].name, (level || 0) + 1),
-			    subclass = (!level && submenu.firstElementChild) ? 'dropdown' : null,
-			    linkclass = (!level && submenu.firstElementChild) ? 'menu' : null,
-			    linkurl = submenu.firstElementChild ? '#' : L.url(url, children[i].name);
+		children.forEach(child => {
+			const submenu = this.renderMainMenu(child, url + '/' + child.name, (level || 0) + 1);
+			const subclass = (!level && submenu.firstElementChild) ? 'dropdown' : '';
+			const linkclass = (!level && submenu.firstElementChild) ? 'menu' : '';
+			const linkurl = submenu.firstElementChild ? '#' : L.url(url, child.name);
 
-			var li = E('li', { 'class': subclass }, [
-				E('a', { 'class': linkclass, 'href': linkurl }, [ _(children[i].title) ]),
+			const li = E('li', { 'class': subclass }, [
+				E('a', { 'class': linkclass, 'href': linkurl }, [
+					_(child.title),
+				]),
 				submenu
 			]);
 
 			ul.appendChild(li);
-		}
+		});
 
 		ul.style.display = '';
 
 		return ul;
 	},
 
-	renderModeMenu: function(tree) {
-		var ul = document.querySelector('#modemenu'),
-		    children = ui.menu.getChildren(tree);
+	renderModeMenu(tree) {
+		const ul = document.querySelector('#modemenu');
+		const children = ui.menu.getChildren(tree);
 
-		for (var i = 0; i < children.length; i++) {
-			var isActive = (L.env.requestpath.length ? children[i].name == L.env.requestpath[0] : i == 0);
+		children.forEach((child, index) => {
+			const isActive = L.env.requestpath.length
+				? child.name === L.env.requestpath[0]
+				: index === 0;
 
-			ul.appendChild(E('li', { 'class': isActive ? 'active' : null }, [
-				E('a', { 'href': L.url(children[i].name) }, [ _(children[i].title) ]),
-				' ',
-				E('span', { 'class': 'divider' }, [ '|' ])
+			ul.appendChild(E('li', { 'class': isActive ? 'active' : '' }, [
+				E('a', { 'href': L.url(child.name) }, [ _(child.title) ])
 			]));
 
 			if (isActive)
-				this.renderMainMenu(children[i], children[i].name);
-		}
+				this.renderMainMenu(child, child.name);
+		});
 
 		if (ul.children.length > 1)
 			ul.style.display = '';
-	},
-
-	handleBodyMargin: function(ev) {
-		var body = document.querySelector('body'),
-		    head = document.querySelector('header');
-
-		body.style.marginTop = head.offsetHeight + 'px';
 	}
 });
