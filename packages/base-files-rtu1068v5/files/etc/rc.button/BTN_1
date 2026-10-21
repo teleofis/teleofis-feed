@@ -1,0 +1,18 @@
+#!/bin/sh
+
+LOG=/etc/event_log
+touch $LOG
+DATE=$(date)
+
+case "${ACTION}" in
+	"pressed")
+		echo "$DATE: usb: Warning! The maximum current limit for the USB has been exceeded." >> $LOG
+		return 5
+	;;
+
+	"released")
+		echo "$DATE: usb: The USB current has been restored to normal values after exceeding the maximum threshold." >> $LOG
+	;;
+esac
+
+return 0

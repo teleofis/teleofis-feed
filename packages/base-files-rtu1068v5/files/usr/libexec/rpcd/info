@@ -1,0 +1,46 @@
+#!/bin/sh
+
+case "$1" in
+	list)
+		echo '{ "info": { } }'
+	;;
+	call)
+		case "$2" in
+			info)
+				input_voltage=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/input_voltage)
+				if [[ "$?" -ne "0" ]]; then
+					input_voltage="n/a"
+					voltage_back="n/a"
+					voltage_cap="n/a"
+					sv_voltage="n/a"
+					temp="n/a"
+					sv_temp="n/a"
+					svfw="n/a"
+					blfw="n/a"
+				else
+					input_voltage=$(getinfo adc4)
+					voltage_back=$(getinfo adc5)
+					voltage_cap=$(getinfo adc6)
+					sv_voltage=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/sv_voltage)
+					temp=$(cat /sys/class/thermal/thermal_zone2/temp)
+					temp=$((temp / 1000))
+					temp="$temp °C"
+					sv_temp=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/sv_temp)
+					sv_temp="$sv_temp °C"
+					svfw=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/fw_version)
+					blfw=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/bl_version)
+				fi
+				echo '{'
+				echo "\"temperature\": \"$temp\", "
+				echo "\"voltage\": \"$input_voltage\", "
+				echo "\"voltage_back\": \"$voltage_back\", "
+				echo "\"voltage_cap\": \"$voltage_cap\", "
+				echo "\"svfw\": \"$svfw\", "
+				echo "\"blfw\": \"$blfw\", "
+				echo "\"sv_temperature\": \"$sv_temp\", "
+				echo "\"sv_voltage\": \"$sv_voltage\""
+				echo '}'
+			;;
+		esac
+	;;
+esac

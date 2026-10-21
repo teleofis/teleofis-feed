@@ -1,0 +1,37 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+OVERLAY="$( grep ' /overlay ' /proc/mounts )"
+
+case "$ACTION" in
+pressed)
+	logger -t reset "reset button pressed"
+	ledblink &
+	[ -z "$OVERLAY" ] && return 0
+
+	return 5
+;;
+timeout)
+	. /etc/diag.sh
+	logger -t reset "reset button timeout, entering failsafe"
+	set_state failsafe
+;;
+released)
+	if [ "$SEEN" -lt 1 ]
+	then
+		kill $(pidof ledblink)
+		echo "REBOOT" > /dev/console
+		logger -t reset "REBOOT requested (held ${SEEN}s)"
+		sync
+		reboot
+	elif [ "$SEEN" -ge 5 -a "$SEEN" -le 8 -a -n "$OVERLAY"  ]
+	then
+		echo "FACTORY RESET" > /dev/console
+		logger -t reset "FACTORY RESET requested (held ${SEEN}s)"
+		jffs2reset -y && reboot &
+	fi
+;;
+esac
+
+return 0

@@ -1,0 +1,235 @@
+#!/bin/sh
+
+error_exit(){
+	exit 1
+}
+
+unsupported_request(){
+	echo "Unsupported request: \
+adc0 adc1 adc2 adc3 adc4 adc5 adc6 hostname \
+serialnum release imei simstatus ccid registration nettype baseid packtype \
+imsi operator voltage temp uptime currentwan wanip"
+	error_exit
+}
+
+case "$1" in
+	"adc"*)
+		ADC=${1:3}
+		ADC_RAW=$(cat /sys/bus/iio/devices/iio\:device1/in_voltage"$ADC"_raw 2>/dev/null)
+		if [[ "$ADC_RAW" -eq "-5" ]]; then
+			echo ""
+			error_exit
+		else
+			echo $ADC_RAW
+		fi
+	;;
+	"hostname")
+		uci get system.@system[0].hostname
+	;;
+	"serialnum")
+		sn=$(fw_printenv -n ethaddr 2>/dev/null)
+		if [[ -n "$sn" ]]; then
+			sn=${sn//:}
+			echo ${sn:4}
+		else
+			echo "n/a"
+			error_exit
+		fi
+	;;
+	"mac")
+		sn=$(fw_printenv -n ethaddr 2>/dev/null)
+		if [[ -n "$sn" ]]; then
+			echo ${sn//:}
+		else
+			echo "n/a"
+			error_exit
+		fi
+	;;
+	"release")
+		. /etc/openwrt_release
+		echo $DISTRIB_DESCRIPTION | sed -E 's/.*-fw-([^ ]+).*/\1/'
+	;;
+	"imei")
+		simman2_cli -d /dev/ttyGSM1 --get-imei 2>/dev/null
+	;;
+	"simstatus")
+		simman2_cli -s core 2>/dev/null
+	;;
+	"modem.network.registration")
+		reg=$(simman2_cli -d /dev/ttyGSM1 --get-reg 2>/dev/null)
+		case "$reg" in
+			"NOT REGISTERED")
+				echo "not_registered"
+			;;
+			"REGISTERED, HOME")
+				echo "registered_home"
+			;;
+			"NOT REGISTERED, OPERATOR SEARCH")
+				echo "searching"
+			;;
+			"REGISTRATION DENIED")
+				echo "denied"
+			;;
+			"REGISTERED, ROAMING!")
+				echo "registered_roaming"
+			;;
+			*)
+				echo "unknown"
+			;;
+		esac
+	;;
+	"modem.sim.active.slot")
+		SIMADDR=$(uci -q get simman2.core.simaddr_gpio_pin)
+		SIMDET0=$(uci -q get simman2.core.simdet0_gpio_pin)
+		SIMDET1=$(uci -q get simman2.core.simdet1_gpio_pin)
+		active=$(cat /sys/class/gpio/gpio$SIMADDR/value)
+		if [[ "$active" -eq "0" ]]; then
+			status=$(cat /sys/class/gpio/gpio$SIMDET0/value)
+			if [[ "$status" -eq "1" ]]; then
+				echo 0
+			else
+				echo 1
+			fi
+		fi
+		if [[ "$active" -eq "1" ]]; then
+			status=$(cat /sys/class/gpio/gpio$SIMDET1/value)
+			if [[ "$status" -eq "1" ]]; then
+				echo 0
+			else
+				echo 2
+			fi
+		fi
+	;;
+	"modem.operator.mcc")
+		mcc=$(simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null)
+		if [[ "$mcc" != "ERROR" ]]; then
+			mcc=$(echo $mcc | awk -F '[()]' '{print substr($2,1,2)}')
+		fi
+		echo $mcc
+	;;
+	"modem.operator.mnc")
+		mnc=$(simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null)
+		if [[ "$mnc" != "ERROR" ]]; then
+			mnc=$(echo $mnc | awk -F '[()]' '{print substr($2,3,5)}')
+		fi
+		echo $mnc
+	;;
+	"ccid")
+		simman2_cli -d /dev/ttyGSM1 --get-ccid 2>/dev/null
+	;;
+	"imsi")
+		simman2_cli -d /dev/ttyGSM1 --get-imsi 2>/dev/null
+	;;
+	"signal")
+		simman2_cli -d /dev/ttyGSM1 --get-csq 2>/dev/null
+	;;
+	"rssi")
+		simman2_cli -d /dev/ttyGSM1 --get-rssi 2>/dev/null
+	;;
+	"rsrp")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-rsrp 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
+	;;
+	"rsrq")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-rsrq 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
+	;;
+	"snr")
+		val=$(simman2_cli -d /dev/ttyGSM1 --get-sinr 2>/dev/null)
+		if [[ "$val" = "N\/A" ]]; then
+			error_exit
+		fi
+		echo $val
+	;;
+	"registration")
+		simman2_cli -d /dev/ttyGSM1 --get-data-status 2>/dev/null
+	;;
+	"nettype")
+		simman2_cli -d /dev/ttyGSM1 --get-net-type 2>/dev/null
+	;;
+	"baseid")
+		simman2_cli -d /dev/ttyGSM1 --get-bsid 2>/dev/null
+	;;
+	"packtype")
+		simman2_cli -d /dev/ttyGSM1 --get-data-type 2>/dev/null
+	;;
+	"operator")
+		simman2_cli -d /dev/ttyGSM1 --get-plmn 2>/dev/null
+	;;
+	"voltage")
+		. /usr/share/libubox/jshn.sh
+		json_load "$(ubus call info info)"
+		json_get_var voltage voltage
+		if [[ -z "$voltage" ]] || [[ "$voltage" == "n/a" ]]; then
+			echo "n/a"
+			error_exit
+		fi
+		voltage=$(echo "scale=3;$voltage/1000" | bc -l) 
+		echo "$voltage"
+	;;
+	"temp")
+		. /usr/share/libubox/jshn.sh
+		json_load "$(ubus call info info)"
+		json_get_var temp temperature
+		temp=${temp%% *}
+		if [[ -z "$temp" ]] || [[ "$temp" == "n/a" ]]; then
+			echo "n/a"
+			error_exit
+		fi
+		echo $temp
+	;;
+	"uptime")
+		cat /proc/uptime | awk -F ' ' '{print $1}'
+	;;
+	"currentwan")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			iface=$(mwan3 policies 2>/dev/null | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
+		else
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+		fi
+		if [[ -n "$wan" ]]; then
+			echo $wan
+		else
+			echo "N/A"
+			error_exit
+		fi
+	;;
+	"wanip")
+		mwan3_enabled=$(uci show mwan3 | grep "enabled='1'")
+		if [[ -n "$mwan3_enabled" ]]; then
+			policy=$(uci get mwan3.default_rule.use_policy)
+			iface=$(mwan3 policies 2>/dev/null | grep -A2 $policy | grep "100%" | awk -F ' ' '{print $1}')
+			. /usr/share/libubox/jshn.sh
+			if [[ -n "$iface" ]]; then
+				json_load "$(ubus call network.interface.$iface status)" 2>/dev/null
+				json_get_var wan l3_device 2>/dev/null
+			fi
+		else
+			wan=$(route -n | grep -m1 "UG" | awk -F ' ' '{print $8}')
+		fi
+		if [[ -n "$wan" ]]; then
+			ip -f inet addr show $wan | awk '/inet / {print $2}' | cut -d "/" -f 1
+		else
+			echo "N/A"
+			error_exit
+		fi
+	;;
+	*)
+		unsupported_request
+	;;
+esac
+
+exit 0

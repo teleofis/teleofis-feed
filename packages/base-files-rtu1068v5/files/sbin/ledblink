@@ -1,0 +1,19 @@
+#!/bin/sh
+
+COUNT=0
+sleep 2
+while [ "$COUNT" -le "4" ]; do
+	echo 0 >  /sys/class/leds/orange:activity/brightness
+	echo 0 >  /sys/class/leds/orange:power/brightness
+	echo 0 >  /sys/class/leds/orange:serial/brightness
+	echo 0 >  /sys/class/leds/orange:wan/brightness
+	sleep 0.3
+	echo 1 >  /sys/class/leds/orange:activity/brightness
+	echo 1 >  /sys/class/leds/orange:power/brightness
+	echo 1 >  /sys/class/leds/orange:serial/brightness
+	echo 1 >  /sys/class/leds/orange:wan/brightness
+	sleep 0.3
+	COUNT=$((COUNT+1))
+done
+
+return 0

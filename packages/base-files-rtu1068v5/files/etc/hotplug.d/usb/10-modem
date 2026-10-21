@@ -1,0 +1,48 @@
+#!/bin/sh
+
+echo $DEVPATH | grep -q "/devices/platform/soc/5200000.usb/" || exit 0
+
+A7602="1e0e/9011/100"
+
+case "$ACTION" in
+    add)
+        case "$PRODUCT" in 
+            "$A7602" )
+                if echo "$DEVPATH" | grep -q "1:1.4"; then
+                    DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/ttyGSM1
+                        sleep 1
+                        ln -s /dev/$DEVICE_NAME /dev/ttyGSM1
+                        COMMAND="at+cgnsspwr=1,0,1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                        COMMAND="at+cgnsstst=1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                    fi
+                    exit 0
+                fi
+                if echo "$DEVPATH" | grep -q "1:1.5"; then
+                    DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/ttyGSM2
+                        ln -s /dev/$DEVICE_NAME /dev/ttyGSM2
+                    fi
+                    exit 0
+                fi
+                if echo "$DEVPATH" | grep -q "1:1.0"; then
+                    DEVICE_NAME=$(ls /sys$DEVPATH/net)
+                    ip link set $DEVICE_NAME name mobile
+                    exit 0
+                fi
+                if echo "$DEVPATH" | grep -q "1:1.3"; then
+                    DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/gps0
+                        ln -s /dev/$DEVICE_NAME /dev/gps0
+                    fi
+                    exit 0
+                fi
+            ;;
+        esac
+    ;;
+esac
+
+exit 0

@@ -22,6 +22,15 @@ case "$MODEL" in
 		uci set simman2.core.simdet1_gpio_pin='104'
 		uci commit simman2
 	;;
+	"TELEOFIS RTU1068V5")
+		uci set simman2.core.pwrkey_gpio_pin='124'
+		uci set simman2.core.gsmpow_gpio_pin='-118'
+		uci set simman2.core.simdet_gpio_pin='122'
+		uci set simman2.core.simaddr_gpio_pin='116'
+		uci set simman2.core.simdet0_gpio_pin='117'
+		uci set simman2.core.simdet1_gpio_pin='120'
+		uci commit simman2
+	;;
 esac
 
 exit 0

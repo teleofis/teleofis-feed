@@ -1,0 +1,60 @@
+#!/bin/sh /etc/rc.common
+
+START=50
+USE_PROCD=1
+
+. /usr/share/iolinesd/iolinesd.sh
+
+PU_GPIO_BASE="512"
+PD_GPIO_BASE="521"
+
+boot() {
+	gpio=$PU_GPIO_BASE
+	count="0"
+	while [ "$gpio" -le "$((PU_GPIO_BASE + 3))" ]
+	do
+		echo $gpio > /sys/class/gpio/export
+		if [ "$count" -le "3" ]; then
+			ln -s /sys/class/gpio/gpio$gpio /dev/pu$count
+		fi
+		gpio=$((gpio + 1))
+		count=$((count + 1))
+	done
+
+	gpio=$PD_GPIO_BASE
+	count="0"
+	while [ "$gpio" -le "$((PD_GPIO_BASE + 3))" ]
+	do
+		echo $gpio > /sys/class/gpio/export
+		if [ "$count" -le "3" ]; then
+			ln -s /sys/class/gpio/gpio$gpio /dev/pd$count
+		fi
+		gpio=$((gpio + 1))
+		count=$((count + 1))
+	done
+	start "$@"
+}
+
+start_service() {
+	config_load iolines
+	iolinesd_generate_conf
+
+	procd_open_instance iolinesd
+	procd_set_param command "$IOLINESD_PROG" -c "$IOLINESD_CONF"
+	procd_set_param respawn ${respawn_threshold:-360} ${respawn_timeout:-5} ${respawn_retry:-0}
+	procd_close_instance
+}
+
+reload_service() {
+	config_load iolines
+	iolinesd_generate_conf
+	procd_send_signal iolines iolinesd HUP
+}
+
+restart() {
+	reload
+}
+
+service_triggers() {
+	procd_add_reload_trigger 'iolines'
+}

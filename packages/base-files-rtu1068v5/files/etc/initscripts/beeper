@@ -1,0 +1,12 @@
+#!/bin/sh
+
+echo 525 > /sys/class/gpio/export 2>/dev/null
+echo high > /sys/class/gpio/gpio525/direction
+sleep 0.3
+echo low > /sys/class/gpio/gpio525/direction
+sleep 0.1
+echo high > /sys/class/gpio/gpio525/direction
+sleep 0.3
+echo low > /sys/class/gpio/gpio525/direction
+
+exit 0
