@@ -27,7 +27,7 @@ case "$1" in
 		uci get system.@system[0].hostname
 	;;
 	"serialnum")
-		sn=$(fw_printenv -n ethaddr 2>/dev/null)
+		sn=$(fw_printenv -n ethaddr 2>/dev/null | tr a-f A-F)
 		if [[ -n "$sn" ]]; then
 			sn=${sn//:}
 			echo ${sn:4}
@@ -37,7 +37,7 @@ case "$1" in
 		fi
 	;;
 	"mac")
-		sn=$(fw_printenv -n ethaddr 2>/dev/null)
+		sn=$(fw_printenv -n ethaddr 2>/dev/null | tr a-f A-F)
 		if [[ -n "$sn" ]]; then
 			echo ${sn//:}
 		else
