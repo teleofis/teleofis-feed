@@ -52,8 +52,30 @@ check_client_id()
 					rm /etc/pollmydevice/exp_port
 				fi
 			;;
+			"TELEOFIS RTU1068V5")
+				SERIALNUM=$(getinfo serialnum)
+				if [[ "$SERIALNUM" != "n/a" ]]; then
+					SERIALNUM="0x$SERIALNUM"
+					CLIENT_ID=$((SERIALNUM*100000+INTERFACE))
+				fi
+				if [ -e /etc/pollmydevice/exp_port ]; then
+					/etc/pollmydevice/exp_port
+					rm /etc/pollmydevice/exp_port
+				fi
+			;;
 		esac
 		[[ -n "$CLIENT_ID" ]] && echo $CLIENT_ID > /tmp/pollmydevice/client_id$INTERFACE
+	fi
+}
+
+migrate_server_list()
+{
+	config_get SERVER "$1" client_server
+	config_get HOST "$1" client_host
+	config_get PORT "$1" client_port
+	if [[ -z "$SERVER" ]] && [[ -n "$HOST" ]]; then
+		uci add_list pollmydevice.$1.client_server="$HOST:${PORT:-6008}"
+		MIGRATED=1
 	fi
 }
 
@@ -101,6 +123,9 @@ start_service_daemon()
 start_service()
 {
 	config_load 'pollmydevice'
+	MIGRATED=0
+	config_foreach migrate_server_list 'interface'
+	[[ "$MIGRATED" -eq 1 ]] && uci commit pollmydevice
 	config_foreach check_client_id 'interface'
 	clear_firewall_settings
 	config_foreach open_firewall_port 'interface'

@@ -1,8 +1,14 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-app-pollmydevice\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
 msgid "PollMyDevice"
 msgstr "Опрос портов по TCP"
-
-msgid "Utility Settings"
-msgstr "Настройки"
 
 msgid "TCP to RS232/RS485 converter"
 msgstr "Конвертер TCP - Последовательный порт"
@@ -22,17 +28,8 @@ msgstr "Управление потоком"
 msgid "StopBits"
 msgstr "Стоп-биты"
 
-msgid "Server Port"
-msgstr "Порт"
-
 msgid "Connection Hold Time (sec)"
 msgstr "Время удержания приоритета соединения (сек)"
-
-msgid "Server Host or IP Address"
-msgstr "Адрес сервера"
-
-msgid "Server Port"
-msgstr "Порт сервера"
 
 msgid "Client Reconnection Timeout (sec)"
 msgstr "Таймаут соединения (сек)"
@@ -40,17 +37,8 @@ msgstr "Таймаут соединения (сек)"
 msgid "Client Authentification"
 msgstr "Авторизация Teleofis"
 
-msgid "Use Teleofis Authentification"
-msgstr "Использовать авторизацию по Teleofis ID"
-
 msgid "Save the changes. The router will reboot"
 msgstr "Сохраните настройки. Роутер перезагрузится"
-
-msgid "Disable console port"
-msgstr "Отключить консоль"
-
-msgid "Enable console port"
-msgstr "Включить консоль"
 
 msgid "Disabled"
 msgstr "Отключено"
@@ -63,9 +51,6 @@ msgstr "Включить"
 
 msgid "Disable log messages"
 msgstr "Отключить логирование"
-
-msgid "New configuration (range [0-6]):"
-msgstr "Новая конфигурация (диапазон [0-6]): "
 
 msgid "Minimum data packet size to send. 0 - not used"
 msgstr "Минимальный размер пакета данных для отправки. 0 - не применяется"
@@ -120,3 +105,27 @@ msgstr "Сетевой порт, используемый для обмена д
 
 msgid "A new rule for traffic in the firewall will be created, allowing connections to the specified network port from external networks. Access from the 'lan' zone is open by default for all network ports"
 msgstr "Будет создано новое правило для трафика в firewall-е, разрешающее подключения к указанному сетевому порту из внешних сетей. Доступ из зоны 'lan' открыт по умолчанию для всех сетевых портов"
+
+msgid "Server list (address:port)"
+msgstr "Список серверов (адрес:порт)"
+
+msgid "Ports in the range from 1 to 1023 cannot be assigned, except for port 502, which is used for Modbus TCP"
+msgstr "Нельзя задавать порты в диапазоне от 1 до 1023, за исключением порта 502, который используется для Modbus TCP"
+
+msgid "Address / Port"
+msgstr "Адрес / Порт"
+
+msgid "Exchange Priority Hold Time (sec)"
+msgstr "Время удержания приоритета обмена (сек)"
+
+msgid "A maximum of 5 servers is allowed"
+msgstr "Разрешено не более 5 серверов"
+
+msgid "Expected format: address:port"
+msgstr "Ожидается формат: адрес:порт"
+
+msgid "Port must be 502 or within 1024-65535"
+msgstr "Порт должен быть 502 или в диапазоне 1024-65535"
+
+msgid "Interval between reconnection attempts to unavailable servers"
+msgstr "Интервал между попытками переподключения к недоступным серверам"
