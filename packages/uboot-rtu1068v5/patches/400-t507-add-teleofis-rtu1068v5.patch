@@ -1,0 +1,919 @@
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index 7b7f10c..b4ec3fc 100644
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -587,7 +587,7 @@ void sunxi_board_init(void)
+ 	defined CONFIG_AXP221_POWER || defined CONFIG_AXP305_POWER || \
+ 	defined CONFIG_AXP809_POWER || defined CONFIG_AXP818_POWER || \
+ 	defined CONFIG_AXP313_POWER || defined CONFIG_AXP717_POWER || \
+-	defined CONFIG_AXP803_POWER
++	defined CONFIG_AXP803_POWER || defined CONFIG_AXP15060_POWER
+ 	power_failed = axp_init();
+ 
+ 	if (IS_ENABLED(CONFIG_AXP_DISABLE_BOOT_ON_POWERON) && !power_failed) {
+@@ -605,6 +605,9 @@ void sunxi_board_init(void)
+ #ifdef CONFIG_AXP_ALDO4_VOLT
+ 	power_failed |= axp_set_aldo4(CONFIG_AXP_ALDO4_VOLT);
+ #endif
++#ifdef CONFIG_AXP_ALDO5_VOLT
++	power_failed |= axp_set_aldo5(CONFIG_AXP_ALDO5_VOLT);
++#endif
+ 
+ #ifdef CONFIG_AXP_DLDO1_VOLT
+ 	power_failed |= axp_set_dldo(1, CONFIG_AXP_DLDO1_VOLT);
+diff --git a/configs/teleofis_rtu1068v5_defconfig b/configs/teleofis_rtu1068v5_defconfig
+new file mode 100644
+index 0000000..66270e7
+--- /dev/null
++++ b/configs/teleofis_rtu1068v5_defconfig
+@@ -0,0 +1,31 @@
++CONFIG_ARM=y
++CONFIG_ARCH_SUNXI=y
++CONFIG_DEFAULT_DEVICE_TREE="allwinner/sun50i-t507-rtu1068v5"
++CONFIG_SPL=y
++CONFIG_DRAM_SUNXI_DX_ODT=0x0c0c0c0c
++CONFIG_DRAM_SUNXI_DX_DRI=0x0e0e0e0e
++CONFIG_DRAM_SUNXI_CA_DRI=0x0e0e
++CONFIG_DRAM_SUNXI_ODT_EN=0x7887bbbb
++CONFIG_DRAM_SUNXI_TPR6=0x31808080
++CONFIG_DRAM_SUNXI_TPR10=0x402e0000
++CONFIG_DRAM_SUNXI_TPR11=0x22262622
++CONFIG_DRAM_SUNXI_TPR12=0x0b0c0d0b
++CONFIG_DRAM_SUNXI_PHY_ADDR_MAP_1=y
++CONFIG_MACH_SUN50I_H616=y
++CONFIG_SUNXI_DRAM_H616_LPDDR4=y
++CONFIG_DRAM_CLK=792
++CONFIG_R_I2C_ENABLE=y
++# CONFIG_SYS_MALLOC_CLEAR_ON_INIT is not set
++CONFIG_SPL_I2C=y
++CONFIG_SPL_SYS_I2C_LEGACY=y
++CONFIG_SYS_I2C_MVTWSI=y
++CONFIG_SYS_I2C_SLAVE=0x7f
++CONFIG_SYS_I2C_SPEED=100000
++CONFIG_SUN8I_EMAC=y
++CONFIG_I2C3_ENABLE=y
++CONFIG_LED=y
++CONFIG_LED_GPIO=y
++CONFIG_AXP15060_POWER=y
++CONFIG_AXP_ALDO5_VOLT=3300
++CONFIG_AXP_DCDC2_VOLT=940
++CONFIG_AXP_DCDC5_VOLT=1100
+diff --git a/drivers/power/Kconfig b/drivers/power/Kconfig
+index eed6505..7d53426 100644
+--- a/drivers/power/Kconfig
++++ b/drivers/power/Kconfig
+@@ -100,6 +100,15 @@ config AXP305_POWER
+ 	Select this to enable support for the axp305 pmic found on most
+ 	H616 boards.
+ 
++config AXP15060_POWER
++	bool "axp15060 pmic support"
++	depends on MACH_SUN50I_H616
++	select AXP_PMIC_BUS
++	select CMD_POWEROFF
++	---help---
++	Select this to enable support for the AXP15060 pmic (the same die as
++	the AXP853T / AXP858) found on some T507 and H616 boards.
++
+ config AXP313_POWER
+ 	bool "axp313 pmic support"
+ 	depends on MACH_SUN50I_H616
+@@ -153,6 +162,7 @@ config AXP_I2C_ADDRESS
+ 	depends on ARCH_SUNXI && !SUNXI_NO_PMIC
+ 	default 0x36 if AXP305_POWER
+ 	default 0x36 if AXP313_POWER
++	default 0x36 if AXP15060_POWER
+ 	default 0x30 if AXP152_POWER
+ 	default 0x34
+ 	---help---
+@@ -160,7 +170,8 @@ config AXP_I2C_ADDRESS
+ 
+ config AXP_DCDC1_VOLT
+ 	int "axp pmic dcdc1 voltage"
+-	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP803_POWER
++	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP803_POWER || AXP15060_POWER
++	default 3300 if AXP15060_POWER
+ 	default 3300 if AXP818_POWER || MACH_SUN8I_R40 || AXP803_POWER
+ 	default 3000 if MACH_SUN6I || MACH_SUN8I || MACH_SUN9I
+ 	---help---
+@@ -174,7 +185,8 @@ config AXP_DCDC1_VOLT
+ 
+ config AXP_DCDC2_VOLT
+ 	int "axp pmic dcdc2 voltage"
+-	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP717_POWER || AXP803_POWER
++	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP717_POWER || AXP803_POWER || AXP15060_POWER
++	default 900 if AXP15060_POWER
+ 	default 900 if AXP818_POWER
+ 	default 1400 if AXP152_POWER || AXP209_POWER
+ 	default 1000 if AXP313_POWER
+@@ -196,7 +208,8 @@ config AXP_DCDC2_VOLT
+ 
+ config AXP_DCDC3_VOLT
+ 	int "axp pmic dcdc3 voltage"
+-	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP717_POWER
++	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP717_POWER || AXP15060_POWER
++	default 900 if AXP15060_POWER
+ 	default 900 if AXP809_POWER || AXP818_POWER
+ 	default 1500 if AXP152_POWER
+ 	default 1250 if AXP209_POWER
+@@ -218,7 +231,8 @@ config AXP_DCDC3_VOLT
+ 
+ config AXP_DCDC4_VOLT
+ 	int "axp pmic dcdc4 voltage"
+-	depends on AXP152_POWER || AXP221_POWER || AXP809_POWER || AXP305_POWER
++	depends on AXP152_POWER || AXP221_POWER || AXP809_POWER || AXP305_POWER || AXP15060_POWER
++	default 900 if AXP15060_POWER
+ 	default 1250 if AXP152_POWER
+ 	default 1200 if MACH_SUN6I
+ 	default 0 if MACH_SUN8I
+@@ -236,17 +250,21 @@ config AXP_DCDC4_VOLT
+ 
+ config AXP_DCDC5_VOLT
+ 	int "axp pmic dcdc5 voltage"
+-	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP803_POWER
++	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP803_POWER || AXP15060_POWER
++	default 1100 if AXP15060_POWER
+ 	default 1500 if MACH_SUN6I || MACH_SUN8I || MACH_SUN9I
+ 	---help---
+ 	Set the voltage (mV) to program the axp pmic dcdc5 at, set to 0 to
+ 	disable dcdc5.
+ 	On A23 / A31 / A33 / A80 / A83T / R40 boards dcdc5 is VCC-DRAM and
+ 	should be 1.5V, 1.35V if DDR3L is used.
++	On T507 / H616 boards with an axp15060 dcdc5 is VCC-DRAM and should
++	be 1.1V for LPDDR4.
+ 
+ config AXP_ALDO1_VOLT
+ 	int "axp pmic (a)ldo1 voltage"
+-	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER
++	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP15060_POWER
++	default 1800 if AXP15060_POWER
+ 	default 0 if MACH_SUN6I || MACH_SUN8I_R40
+ 	default 1800 if MACH_SUN8I_A83T
+ 	default 3000 if MACH_SUN8I || MACH_SUN9I
+@@ -261,7 +279,8 @@ config AXP_ALDO1_VOLT
+ 
+ config AXP_ALDO2_VOLT
+ 	int "axp pmic (a)ldo2 voltage"
+-	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER
++	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP15060_POWER
++	default 1800 if AXP15060_POWER
+ 	default 3000 if AXP152_POWER || AXP209_POWER
+ 	default 0 if MACH_SUN6I || MACH_SUN9I
+ 	default 1800 if MACH_SUN8I_A83T
+@@ -279,7 +298,8 @@ config AXP_ALDO2_VOLT
+ 
+ config AXP_ALDO3_VOLT
+ 	int "axp pmic (a)ldo3 voltage"
+-	depends on AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER
++	depends on AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP15060_POWER
++	default 1800 if AXP15060_POWER
+ 	default 0 if AXP209_POWER || MACH_SUN9I
+ 	default 3000 if MACH_SUN6I || MACH_SUN8I
+ 	---help---
+@@ -336,7 +356,8 @@ config AXP_ALDO3_INRUSH_QUIRK
+ 
+ config AXP_ALDO4_VOLT
+ 	int "axp pmic (a)ldo4 voltage"
+-	depends on AXP209_POWER
++	depends on AXP209_POWER || AXP15060_POWER
++	default 1800 if AXP15060_POWER
+ 	default 0 if AXP209_POWER
+ 	---help---
+ 	Set the voltage (mV) to program the axp pmic aldo4 at, set to 0 to
+@@ -343,6 +354,16 @@ config AXP_ALDO4_VOLT
+ 	disable aldo4.
+ 	On A10(s) / A13 / A20 boards aldo4 should be 2.8V.
+ 
++config AXP_ALDO5_VOLT
++	int "axp pmic (a)ldo5 voltage"
++	depends on AXP15060_POWER
++	default 3300 if AXP15060_POWER
++	---help---
++	Set the voltage (mV) to program the axp pmic aldo5 at, set to 0 to
++	disable aldo5.
++	On T507 / H616 boards with an axp15060 aldo5 is VCC-PE and should
++	be 3.3V.
++
+ config AXP_DLDO1_VOLT
+ 	int "axp pmic dldo1 voltage"
+ 	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER
+diff --git a/drivers/power/Makefile b/drivers/power/Makefile
+index 3363191..0c2dd9e 100644
+--- a/drivers/power/Makefile
++++ b/drivers/power/Makefile
+@@ -10,6 +10,7 @@ obj-y += regulator/
+ 
+ obj-$(CONFIG_AXP221_POWER)	+= axp221.o
+ ifdef CONFIG_XPL_BUILD
++obj-$(CONFIG_AXP15060_POWER)	+= axp15060.o
+ obj-$(CONFIG_AXP152_POWER)	+= axp152.o
+ obj-$(CONFIG_AXP209_POWER)	+= axp209.o
+ obj-$(CONFIG_AXP305_POWER)	+= axp_spl.o
+diff --git a/drivers/power/axp15060.c b/drivers/power/axp15060.c
+new file mode 100644
+index 0000000..0525490
+--- /dev/null
++++ b/drivers/power/axp15060.c
+@@ -0,0 +1,205 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * AXP15060 driver
++ *
++ * The AXP15060 is the same die as the AXP853T / AXP858 found on Allwinner
++ * T507 / H616 boards. Voltage ranges and register offsets follow the
++ * "AXP853T Datasheet V1.1" register map.
++ *
++ * Based on axp809.c
++ * (C) Copyright 2016 Chen-Yu Tsai <wens@csie.org>
++ * Based on axp221.c
++ * (C) Copyright 2014 Hans de Goede <hdegoede@redhat.com>
++ * (C) Copyright 2013 Oliver Schinagl <oliver@schinagl.nl>
++ */
++
++#include <command.h>
++#include <errno.h>
++#include <asm/arch/pmic_bus.h>
++#include <axp_pmic.h>
++
++static u8 axp15060_mvolt_to_cfg(int mvolt, int min, int max, int div)
++{
++	if (mvolt < min)
++		mvolt = min;
++	else if (mvolt > max)
++		mvolt = max;
++
++	return (mvolt - min) / div;
++}
++
++/*
++ * DCDC2/3/4 share one two-slope table: 0.50-1.20V in 10mV steps (cfg 0-70),
++ * then 1.22-1.54V in 20mV steps (cfg 71-87).
++ */
++static u8 axp15060_dcdc234_to_cfg(unsigned int mvolt)
++{
++	if (mvolt > 1200)
++		return 71 + axp15060_mvolt_to_cfg(mvolt, 1220, 1540, 20);
++
++	return axp15060_mvolt_to_cfg(mvolt, 500, 1200, 10);
++}
++
++static int axp15060_set_dcdc(u8 reg, u8 enable_bit, u8 cfg, unsigned int mvolt)
++{
++	int ret;
++
++	if (mvolt == 0)
++		return pmic_bus_clrbits(AXP15060_OUTPUT_CTRL1, enable_bit);
++
++	ret = pmic_bus_write(reg, cfg);
++	if (ret)
++		return ret;
++
++	return pmic_bus_setbits(AXP15060_OUTPUT_CTRL1, enable_bit);
++}
++
++int axp_set_dcdc1(unsigned int mvolt)
++{
++	u8 cfg = axp15060_mvolt_to_cfg(mvolt, 1500, 3400, 100);
++
++	return axp15060_set_dcdc(AXP15060_DCDC1_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC1_EN, cfg, mvolt);
++}
++
++int axp_set_dcdc2(unsigned int mvolt)
++{
++	return axp15060_set_dcdc(AXP15060_DCDC2_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC2_EN,
++				 axp15060_dcdc234_to_cfg(mvolt), mvolt);
++}
++
++int axp_set_dcdc3(unsigned int mvolt)
++{
++	return axp15060_set_dcdc(AXP15060_DCDC3_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC3_EN,
++				 axp15060_dcdc234_to_cfg(mvolt), mvolt);
++}
++
++int axp_set_dcdc4(unsigned int mvolt)
++{
++	return axp15060_set_dcdc(AXP15060_DCDC4_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC4_EN,
++				 axp15060_dcdc234_to_cfg(mvolt), mvolt);
++}
++
++/*
++ * DCDC5 is VCC-DRAM on T507/H616 designs: 0.80-1.12V in 10mV steps
++ * (cfg 0-32), then 1.14-1.84V in 20mV steps (cfg 33-68).
++ */
++int axp_set_dcdc5(unsigned int mvolt)
++{
++	u8 cfg;
++
++	if (mvolt > 1120)
++		cfg = 33 + axp15060_mvolt_to_cfg(mvolt, 1140, 1840, 20);
++	else
++		cfg = axp15060_mvolt_to_cfg(mvolt, 800, 1120, 10);
++
++	return axp15060_set_dcdc(AXP15060_DCDC5_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC5_EN, cfg, mvolt);
++}
++
++int axp_set_dcdc6(unsigned int mvolt)
++{
++	u8 cfg = axp15060_mvolt_to_cfg(mvolt, 500, 3400, 100);
++
++	return axp15060_set_dcdc(AXP15060_DCDC6_CTRL,
++				 AXP15060_OUTPUT_CTRL1_DCDC6_EN, cfg, mvolt);
++}
++
++static int axp_set_aldo(int aldo_num, unsigned int mvolt)
++{
++	static const u8 aldo_regs[] = {
++		AXP15060_ALDO1_CTRL, AXP15060_ALDO2_CTRL, AXP15060_ALDO3_CTRL,
++		AXP15060_ALDO4_CTRL, AXP15060_ALDO5_CTRL,
++	};
++	int ret;
++	u8 cfg;
++
++	if (aldo_num < 1 || aldo_num > 5)
++		return -EINVAL;
++
++	if (mvolt == 0)
++		return pmic_bus_clrbits(AXP15060_OUTPUT_CTRL2,
++				AXP15060_OUTPUT_CTRL2_ALDO1_EN << (aldo_num - 1));
++
++	cfg = axp15060_mvolt_to_cfg(mvolt, 700, 3300, 100);
++	ret = pmic_bus_write(aldo_regs[aldo_num - 1], cfg);
++	if (ret)
++		return ret;
++
++	return pmic_bus_setbits(AXP15060_OUTPUT_CTRL2,
++				AXP15060_OUTPUT_CTRL2_ALDO1_EN << (aldo_num - 1));
++}
++
++int axp_set_aldo1(unsigned int mvolt)
++{
++	return axp_set_aldo(1, mvolt);
++}
++
++int axp_set_aldo2(unsigned int mvolt)
++{
++	return axp_set_aldo(2, mvolt);
++}
++
++int axp_set_aldo3(unsigned int mvolt)
++{
++	return axp_set_aldo(3, mvolt);
++}
++
++int axp_set_aldo4(unsigned int mvolt)
++{
++	return axp_set_aldo(4, mvolt);
++}
++
++int axp_set_aldo5(unsigned int mvolt)
++{
++	return axp_set_aldo(5, mvolt);
++}
++
++int axp_set_sw(bool on)
++{
++	if (on)
++		return pmic_bus_setbits(AXP15060_OUTPUT_CTRL3,
++					AXP15060_OUTPUT_CTRL3_SW_EN);
++
++	return pmic_bus_clrbits(AXP15060_OUTPUT_CTRL3,
++				AXP15060_OUTPUT_CTRL3_SW_EN);
++}
++
++int axp_init(void)
++{
++	u8 axp_chip_id;
++	int ret;
++
++	ret = pmic_bus_init();
++	if (ret)
++		return ret;
++
++	ret = pmic_bus_read(AXP15060_CHIP_ID, &axp_chip_id);
++	if (ret)
++		return ret;
++
++	if (axp_chip_id != AXP15060_CHIP_ID_VALUE) {
++		printf("PMIC: unexpected chip ID 0x%02x\n", axp_chip_id);
++		return -ENODEV;
++	}
++
++	printf("PMIC: AXP15060 (AXP853T/AXP858)\n");
++
++	return 0;
++}
++
++#if !IS_ENABLED(CONFIG_SYSRESET_CMD_POWEROFF)
++int do_poweroff(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
++{
++	pmic_bus_write(AXP15060_SHUTDOWN, AXP15060_SHUTDOWN_POWEROFF);
++
++	/* infinite loop during shutdown */
++	while (1) {}
++
++	/* not reached */
++	return 0;
++}
++#endif
+diff --git a/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+new file mode 100644
+index 0000000..f49702a
+--- /dev/null
++++ b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+@@ -0,0 +1,384 @@
++// SPDX-License-Identifier: (GPL-2.0+ or MIT)
++/*
++ * Copyright (C) 
++ */
++
++/dts-v1/;
++
++#include "sun50i-h616.dtsi"
++#include "sun50i-h616-cpu-opp.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/interrupt-controller/arm-gic.h>
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "TELEOFIS RTU1068V5";
++	compatible = "teleofis,rtu1068v5", "allwinner,sun50i-t507", "allwinner,sun50i-h616";
++
++	aliases {
++		ethernet0 = &emac0;
++		ethernet1 = &emac1;
++		serial0 = &uart0;
++		serial1 = &uart1;
++		serial2 = &uart5;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led-0 {
++			function = LED_FUNCTION_WAN;
++			color = <LED_COLOR_ID_ORANGE>;
++			gpios = <&pio 4 13 GPIO_ACTIVE_HIGH>;	/* PE13, NET */
++			default-state = "on";
++		};
++
++		led-1 {
++			function = LED_FUNCTION_ACTIVITY;
++			color = <LED_COLOR_ID_ORANGE>;
++			gpios = <&pio 4 14 GPIO_ACTIVE_HIGH>;	/* PE14, ACT */
++			default-state = "on";
++		};
++
++		led-2 {
++			function = "serial";
++			color = <LED_COLOR_ID_ORANGE>;
++			gpios = <&pio 4 15 GPIO_ACTIVE_HIGH>;	/* PE15, SERIAL */
++			default-state = "on";
++		};
++
++		led-3 {
++			function = LED_FUNCTION_POWER;
++			color = <LED_COLOR_ID_ORANGE>;
++			gpios = <&pio 4 22 GPIO_ACTIVE_HIGH>;	/* PE22, PWR */
++			default-state = "on";
++		};
++
++		led-4 {
++			function = LED_FUNCTION_WLAN;
++			color = <LED_COLOR_ID_ORANGE>;
++			gpios = <&pio 3 19 GPIO_ACTIVE_HIGH>;	/* PD19, WLAN_LED */
++			default-state = "on";
++		};
++	};
++
++	pps {
++		compatible = "pps-gpio";
++		gpios = <&pio 3 27 GPIO_ACTIVE_HIGH>;	/* PD27 */
++	};
++
++	reg_vcc5v: vcc5v {
++		/* board wide 5V supply directly from the USB-C socket */
++		compatible = "regulator-fixed";
++		regulator-name = "vcc-5v";
++		regulator-min-microvolt = <5000000>;
++		regulator-max-microvolt = <5000000>;
++		regulator-always-on;
++	};
++
++	reg_gmac_3v3: gmac-3v3 {
++		compatible = "regulator-fixed";
++		regulator-name = "gmac-3v3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		enable-active-high;
++		gpio = <&pio 3 22 GPIO_ACTIVE_HIGH>;
++		regulator-always-on;
++	};
++
++	reg_vcc_sd: vcc-sd {
++		compatible = "regulator-fixed";
++		regulator-name = "vcc-sd";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		vin-supply = <&reg_dcdc1>;
++		enable-active-high;
++		gpio = <&pio 4 0 GPIO_ACTIVE_HIGH>;	/* PE0 */
++	};
++};
++
++&cpu0 {
++	cpu-supply = <&reg_dcdc2>;
++};
++
++/* SCK on PA10, SDA on PA11 */
++&i2c3 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&i2c3_pins>;
++	status = "okay";
++};
++
++&pio {
++	vcc-pa-supply = <&reg_dcdc1>;
++	vcc-pc-supply = <&reg_aldo1>;
++	vcc-pd-supply = <&reg_aldo1>; // Don't know why
++	vcc-pe-supply = <&reg_aldo5>;
++	vcc-pf-supply = <&reg_dcdc1>;
++	vcc-pg-supply = <&reg_dcdc1>;
++	vcc-ph-supply = <&reg_dcdc1>;
++	vcc-pi-supply = <&reg_dcdc6>;
++
++	/* not in sun50i-h616.dtsi, which only defines spi1 CS0 */
++	spi1_cs1_pin: spi1-cs1-pin {
++		pins = "PH9";
++		function = "spi1";
++	};
++
++	/* not in sun50i-h616.dtsi */
++	uart5_pins: uart5-pins {
++		pins = "PH2", "PH3";
++		function = "uart5";
++	};
++
++	/* not in sun50i-h616.dtsi */
++	i2c3_pins: i2c3-pins {
++		pins = "PA10", "PA11";
++		function = "i2c3";
++	};
++};
++
++&emac0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&ext_rgmii_pins>;
++	phy-mode = "rgmii-id";
++	phy-handle = <&ext_rgmii_phy>;
++	phy-supply = <&reg_dcdc6>,<&reg_gmac_3v3>;
++	status = "okay";
++};
++
++&emac1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&rmii_pins>;
++	phy-mode = "rmii";
++	phy-handle = <&rmii_phy>;
++	phy-supply = <&reg_dcdc6>;
++	allwinner,rx-delay-ps = <0>;
++	allwinner,tx-delay-ps = <700>;
++	//phy-reset-gpios = <&pio 7 5 GPIO_ACTIVE_HIGH>; // PH5
++	//phy-reset-duration = <200>;
++	//phy-reset-post-delay = <40>;
++	status = "okay";
++};
++
++&mdio0 {
++	ext_rgmii_phy: ethernet-phy@0 {
++		compatible = "ethernet-phy-ieee802.3-c22";
++		reg = <0>;
++		rx-internal-delay-ps = <1900>;
++		motorcomm,auto-sleep-disabled;
++		motorcomm,keep-pll-enabled;
++		reset-gpios = <&pio 8 6 GPIO_ACTIVE_LOW>; // PI6
++		reset-assert-us = <100000>;
++		reset-deassert-us = <40000>;
++	};
++};
++
++&mdio1 {
++	/*
++	reset-gpios = <&pio 7 5 GPIO_ACTIVE_HIGH>; // PH5
++	reset-assert-us = <50000>;
++	reset-deassert-us = <1000>;
++	*/
++	rmii_phy: ethernet-phy@0 {
++		//clocks = <&ccu CLK_EMAC_25M>;
++		//reset-gpios = <&pio 7 5 GPIO_ACTIVE_HIGH>; // PH5
++		//reset-assert-us = <100000>;
++		//reset-deassert-us = <40000>;
++		compatible = "ethernet-phy-ieee802.3-c22";
++		reg = <0>;
++	};
++};
++
++&mmc0 {
++	vmmc-supply = <&reg_vcc_sd>;
++	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>;	/* PF6 */
++	bus-width = <4>;
++	status = "okay";
++};
++
++&mmc2 {
++	vmmc-supply = <&reg_dcdc1>;
++	vqmmc-supply = <&reg_aldo1>;
++	broken-cd;
++	bus-width = <8>;
++	non-removable;
++	cap-mmc-highspeed;
++	max-frequency = <50000000>;
++	mmc-ddr-1_8v;
++	mmc-hs200-1_8v;
++	status = "okay";
++};
++
++&r_i2c {
++	status = "okay";
++
++	axp305: pmic@36 {
++		compatible = "x-powers,axp15060";
++		reg = <0x36>;
++
++		/* dummy interrupt to appease the driver for now */
++		interrupts = <GIC_SPI 103 IRQ_TYPE_LEVEL_HIGH>;
++		interrupt-controller;
++		#interrupt-cells = <1>;
++
++		x-powers,self-working-mode;
++		vin1-supply = <&reg_vcc5v>;
++		vin2-supply = <&reg_vcc5v>;
++		vin3-supply = <&reg_vcc5v>;
++		vin4-supply = <&reg_vcc5v>;
++		vin5-supply = <&reg_vcc5v>;
++		vin6-supply = <&reg_vcc5v>;
++		aldoin-supply = <&reg_vcc5v>;
++		bldoin-supply = <&reg_vcc5v>;
++		cldoin-supply = <&reg_vcc5v>;
++
++		regulators {
++			reg_aldo1: aldo1 {
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++				regulator-name = "vcc-aldo1";
++			};
++
++			reg_aldo2: aldo2 {
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++				regulator-name = "vcc-aldo2";
++			};
++
++			reg_aldo3: aldo3 {
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++				regulator-name = "vcc-aldo3";
++			};
++
++			reg_aldo4: aldo4 {
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++				regulator-name = "vcc-aldo4";
++			};
++
++			reg_aldo5: aldo5 {
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++				regulator-name = "vcc-aldo5";
++			};
++
++			bldo1 {
++				/* unused */
++			};
++
++			bldo2 {
++				/* unused */
++			};
++
++			bldo3 {
++				/* unused */
++			};
++
++			bldo4 {
++				/* unused */
++			};
++
++			cldo1 {
++				/* reserved */
++			};
++
++			cldo2 {
++				/* unused */
++			};
++
++			cldo3 {
++				/* unused */
++			};
++
++			reg_dcdc1: dcdc1 {
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++				regulator-name = "vdd-dcdc1";
++			};
++
++			reg_dcdc2: dcdc2 {
++				regulator-always-on;
++				regulator-min-microvolt = <810000>;
++				regulator-max-microvolt = <1100000>;
++				regulator-name = "vdd-cpu";
++			};
++
++			reg_dcdc3: dcdc3 {
++				regulator-always-on;
++				regulator-min-microvolt = <900000>;
++				regulator-max-microvolt = <900000>;
++				regulator-name = "vdd-dcdc3";
++			};
++
++			reg_dcdc4: dcdc4 {
++				regulator-always-on;
++				regulator-min-microvolt = <810000>;
++				regulator-max-microvolt = <990000>;
++				regulator-name = "vdd-gpu";
++			};
++
++			reg_dcdc5: dcdc5 {
++				regulator-always-on;
++				regulator-min-microvolt = <1100000>;
++				regulator-max-microvolt = <1100000>;
++				regulator-name = "vdd-dram";
++			};
++
++			reg_dcdc6: dcdc6 {
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++				regulator-name = "vdd-dcdc6";
++			};
++
++			sw {
++				/* unused */
++			};
++		};
++	};
++};
++
++/* PH5 CS0, PH6 CLK, PH7 MOSI, PH8 MISO, PH9 CS1 */
++&spi1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&spi1_pins>, <&spi1_cs0_pin>, <&spi1_cs1_pin>;
++	status = "okay";
++};
++
++/* RS485 #1: TX/RX on PH0/PH1, RE/DE on PD25 */
++&uart0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart0_ph_pins>;
++	rts-gpios = <&pio 3 25 GPIO_ACTIVE_HIGH>;	/* PD25, RE/DE */
++	linux,rs485-enabled-at-boot-time;
++	status = "okay";
++};
++
++/* 4-wire RS232: TX/RX on PG6/PG7, RTS/CTS on PG8/PG9 */
++&uart1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
++	uart-has-rtscts;
++	status = "okay";
++};
++
++/* RS485 #2: TX/RX on PH2/PH3, RE/DE on PD23 */
++&uart5 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart5_pins>;
++	rts-gpios = <&pio 3 23 GPIO_ACTIVE_HIGH>;	/* PD23, RE/DE */
++	linux,rs485-enabled-at-boot-time;
++	status = "okay";
++};
+diff --git a/include/axp15060.h b/include/axp15060.h
+new file mode 100644
+index 0000000..9e433a0
+--- /dev/null
++++ b/include/axp15060.h
+@@ -0,0 +1,77 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++/*
++ * X-Powers AXP15060 Power Management IC driver
++ *
++ * The AXP15060 is the same die as the AXP853T / AXP858 used on Allwinner
++ * T507 / H616 designs; register offsets below are taken from the
++ * "AXP853T Datasheet V1.1" register map.
++ */
++
++#define AXP15060_CHIP_ID		0x03
++#define AXP15060_CHIP_ID_VALUE		0x54
++
++#define AXP15060_OUTPUT_CTRL1		0x10
++#define AXP15060_OUTPUT_CTRL1_DCDC1_EN		(1 << 0)
++#define AXP15060_OUTPUT_CTRL1_DCDC2_EN		(1 << 1)
++#define AXP15060_OUTPUT_CTRL1_DCDC3_EN		(1 << 2)
++#define AXP15060_OUTPUT_CTRL1_DCDC4_EN		(1 << 3)
++#define AXP15060_OUTPUT_CTRL1_DCDC5_EN		(1 << 4)
++#define AXP15060_OUTPUT_CTRL1_DCDC6_EN		(1 << 5)
++
++#define AXP15060_OUTPUT_CTRL2		0x11
++#define AXP15060_OUTPUT_CTRL2_ALDO1_EN		(1 << 0)
++#define AXP15060_OUTPUT_CTRL2_ALDO2_EN		(1 << 1)
++#define AXP15060_OUTPUT_CTRL2_ALDO3_EN		(1 << 2)
++#define AXP15060_OUTPUT_CTRL2_ALDO4_EN		(1 << 3)
++#define AXP15060_OUTPUT_CTRL2_ALDO5_EN		(1 << 4)
++#define AXP15060_OUTPUT_CTRL2_BLDO1_EN		(1 << 5)
++#define AXP15060_OUTPUT_CTRL2_BLDO2_EN		(1 << 6)
++#define AXP15060_OUTPUT_CTRL2_BLDO3_EN		(1 << 7)
++
++#define AXP15060_OUTPUT_CTRL3		0x12
++#define AXP15060_OUTPUT_CTRL3_BLDO4_EN		(1 << 0)
++#define AXP15060_OUTPUT_CTRL3_BLDO5_EN		(1 << 1)
++#define AXP15060_OUTPUT_CTRL3_CLDO1_EN		(1 << 2)
++#define AXP15060_OUTPUT_CTRL3_CLDO2_EN		(1 << 3)
++#define AXP15060_OUTPUT_CTRL3_CLDO3_EN		(1 << 4)
++#define AXP15060_OUTPUT_CTRL3_CLDO4_EN		(1 << 5)
++#define AXP15060_OUTPUT_CTRL3_CPUSLDO_EN	(1 << 6)
++#define AXP15060_OUTPUT_CTRL3_SW_EN		(1 << 7)
++
++#define AXP15060_DCDC1_CTRL		0x13
++#define AXP15060_DCDC2_CTRL		0x14
++#define AXP15060_DCDC3_CTRL		0x15
++#define AXP15060_DCDC4_CTRL		0x16
++#define AXP15060_DCDC5_CTRL		0x17
++#define AXP15060_DCDC6_CTRL		0x18
++
++/*
++ * Note the gap: ALDO1 sits at 0x19, then 0x1a-0x1f hold the DCDC mode,
++ * output monitor and IRQ/PWROK registers, and ALDO2..ALDO5 resume at 0x20.
++ * ALDOn_CTRL is therefore not a plain "base + n" sequence.
++ */
++#define AXP15060_ALDO1_CTRL		0x19
++#define AXP15060_DCDC_MODE_CTRL1	0x1a
++#define AXP15060_DCDC_MODE_CTRL2	0x1b
++#define AXP15060_OUTPUT_MONITOR_CTRL	0x1e
++#define AXP15060_IRQ_PWROK_VOFF		0x1f
++#define AXP15060_ALDO2_CTRL		0x20
++#define AXP15060_ALDO3_CTRL		0x21
++#define AXP15060_ALDO4_CTRL		0x22
++#define AXP15060_ALDO5_CTRL		0x23
++
++#define AXP15060_BLDO1_CTRL		0x24
++#define AXP15060_BLDO2_CTRL		0x25
++#define AXP15060_BLDO3_CTRL		0x26
++#define AXP15060_BLDO4_CTRL		0x27
++#define AXP15060_BLDO5_CTRL		0x28
++
++#define AXP15060_CLDO1_CTRL		0x29
++#define AXP15060_CLDO2_CTRL		0x2a
++#define AXP15060_CLDO3_CTRL		0x2b
++#define AXP15060_CLDO4_CTRL		0x2d
++#define AXP15060_CPUSLDO_CTRL		0x2e
++
++#define AXP15060_WAKEUP_CTRL		0x31
++#define AXP15060_SHUTDOWN		0x32
++#define AXP15060_SHUTDOWN_POWEROFF		(1 << 7)
+diff --git a/include/axp_pmic.h b/include/axp_pmic.h
+index ae62ef0..e82c4d1 100644
+--- a/include/axp_pmic.h
++++ b/include/axp_pmic.h
+@@ -13,6 +13,7 @@
+ #include <axp209.h>
+ #include <axp221.h>
+ #include <axp305.h>
++#include <axp15060.h>
+ #include <axp809.h>
+ #include <axp818.h>
+ 
+@@ -45,9 +46,11 @@ int axp_set_dcdc2(unsigned int mvolt);
+ int axp_set_dcdc3(unsigned int mvolt);
+ int axp_set_dcdc4(unsigned int mvolt);
+ int axp_set_dcdc5(unsigned int mvolt);
++int axp_set_dcdc6(unsigned int mvolt);
+ int axp_set_aldo1(unsigned int mvolt);
+ int axp_set_aldo2(unsigned int mvolt);
+ int axp_set_aldo3(unsigned int mvolt);
+ int axp_set_aldo4(unsigned int mvolt);
++int axp_set_aldo5(unsigned int mvolt);
+ int axp_set_dldo(int dldo_num, unsigned int mvolt);
+ int axp_set_eldo(int eldo_num, unsigned int mvolt);

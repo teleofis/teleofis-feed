@@ -1,0 +1,26 @@
+diff --git a/configs/teleofis_rtu1068v5_defconfig b/configs/teleofis_rtu1068v5_defconfig
+--- a/configs/teleofis_rtu1068v5_defconfig
++++ b/configs/teleofis_rtu1068v5_defconfig
+@@ -40,3 +40,4 @@
+ CONFIG_BOOTCOUNT_LIMIT=y
+ CONFIG_BOOTCOUNT_ENV=y
+ CONFIG_WATCHDOG_AUTOSTART=y
++CONFIG_WDT_GPIO=y
+diff --git a/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+--- a/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
++++ b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+@@ -100,6 +100,14 @@
+ 		enable-active-high;
+ 		gpio = <&pio 4 0 GPIO_ACTIVE_HIGH>;	/* PE0 */
+ 	};
++
++	watchdog {
++		compatible = "linux,wdt-gpio";
++		gpios = <&pio 3 6 GPIO_ACTIVE_HIGH>;	/* PD6 */
++		hw_algo = "toggle";
++		hw_margin_ms = <200>;
++		always-running;
++	};
+ };
+ 
+ &cpu0 {

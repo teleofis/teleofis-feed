@@ -1,0 +1,116 @@
+diff --git a/arch/arm/mach-sunxi/board.c b/arch/arm/mach-sunxi/board.c
+--- a/arch/arm/mach-sunxi/board.c
++++ b/arch/arm/mach-sunxi/board.c
+@@ -182,6 +182,14 @@
+ 	sunxi_gpio_set_cfgpin(SUNXI_GPG(6), SUN8I_GPG_UART1);
+ 	sunxi_gpio_set_cfgpin(SUNXI_GPG(7), SUN8I_GPG_UART1);
+ 	sunxi_gpio_set_pull(SUNXI_GPG(7), SUNXI_GPIO_PULL_UP);
++#elif CONFIG_CONS_INDEX == 2 && defined(CONFIG_MACH_SUN50I_H616)
++	sunxi_gpio_set_cfgpin(SUNXI_GPG(6), SUN50I_H616_GPG_UART1);
++	sunxi_gpio_set_cfgpin(SUNXI_GPG(7), SUN50I_H616_GPG_UART1);
++	sunxi_gpio_set_pull(SUNXI_GPG(7), SUNXI_GPIO_PULL_UP);
++	/* TF-A BL31 always prints to UART0, mux it as with CONS_INDEX 1 */
++	sunxi_gpio_set_cfgpin(SUNXI_GPH(0), SUN50I_H616_GPH_UART0);
++	sunxi_gpio_set_cfgpin(SUNXI_GPH(1), SUN50I_H616_GPH_UART0);
++	sunxi_gpio_set_pull(SUNXI_GPH(1), SUNXI_GPIO_PULL_UP);
+ #else
+ #error Unsupported console port number. Please fix pin mux settings in board.c
+ #endif
+diff --git a/include/sunxi_gpio.h b/include/sunxi_gpio.h
+--- a/include/sunxi_gpio.h
++++ b/include/sunxi_gpio.h
+@@ -140,6 +140,7 @@
+ #define SUN8I_GPG_SDC1		2
+ #define SUN8I_GPG_UART1		2
+ #define SUN5I_GPG_UART1		4
++#define SUN50I_H616_GPG_UART1	2
+ 
+ #define SUN6I_GPH_PWM		2
+ #define SUN8I_GPH_PWM		2
+diff --git a/arch/arm/mach-sunxi/clock_sun50i_h6.c b/arch/arm/mach-sunxi/clock_sun50i_h6.c
+--- a/arch/arm/mach-sunxi/clock_sun50i_h6.c
++++ b/arch/arm/mach-sunxi/clock_sun50i_h6.c
+@@ -75,6 +75,12 @@
+ 	/* deassert uart reset */
+ 	setbits_le32(ccm + CCU_H6_UART_GATE_RESET,
+ 		     1 << (RESET_SHIFT + CONFIG_CONS_INDEX - 1));
++
++#if CONFIG_CONS_INDEX != 1
++	/* TF-A BL31 always prints to UART0, enable it as well */
++	setbits_le32(ccm + CCU_H6_UART_GATE_RESET, 1 << GATE_SHIFT);
++	setbits_le32(ccm + CCU_H6_UART_GATE_RESET, 1 << RESET_SHIFT);
++#endif
+ }
+ 
+ void clock_set_pll1(unsigned int clk)
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -29,6 +29,7 @@
+ #include <asm/arch/mmc.h>
+ #include <asm/arch/prcm.h>
+ #include <asm/arch/pmic_bus.h>
++#include <asm/arch/serial.h>
+ #include <asm/arch/spl.h>
+ #include <asm/arch/sys_proto.h>
+ #include <asm/global_data.h>
+@@ -975,6 +976,25 @@
+ 	return 0;
+ }
+ 
++#if CONFIG_CONS_INDEX == 2 && defined(CONFIG_MACH_SUN50I_H616)
++/*
++ * Hand UART1 over to Linux the same way as with the console on UART0:
++ * held in reset, with its bus clock gated. This runs after the last
++ * U-Boot message, so let the transmitter drain first.
++ */
++void board_cleanup_before_linux(void)
++{
++	void *const ccm = (void *)SUNXI_CCM_BASE;
++	void *const lsr = (void *)SUNXI_UART1_BASE + 0x14;
++
++	while (!(readl(lsr) & BIT(6)))		/* LSR.TEMT */
++		;
++
++	clrbits_le32(ccm + CCU_H6_UART_GATE_RESET, 1 << (RESET_SHIFT + 1));
++	clrbits_le32(ccm + CCU_H6_UART_GATE_RESET, 1 << (GATE_SHIFT + 1));
++}
++#endif
++
+ #ifdef CONFIG_SPL_LOAD_FIT
+ static void set_spl_dt_name(const char *name)
+ {
+diff --git a/configs/teleofis_rtu1068v5_defconfig b/configs/teleofis_rtu1068v5_defconfig
+--- a/configs/teleofis_rtu1068v5_defconfig
++++ b/configs/teleofis_rtu1068v5_defconfig
+@@ -45,3 +45,4 @@
+ CONFIG_AUTOBOOT_KEYED=y
+ CONFIG_AUTOBOOT_PROMPT="Type password to abort autoboot in %2d seconds\n"
+ CONFIG_AUTOBOOT_STOP_STR="root"
++CONFIG_CONS_INDEX=2
+diff --git a/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+--- a/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
++++ b/dts/upstream/src/arm64/allwinner/sun50i-t507-rtu1068v5.dts
+@@ -25,7 +25,7 @@
+ 	};
+ 
+ 	chosen {
+-		stdout-path = "serial0:115200n8";
++		stdout-path = "serial1:115200n8";
+ 	};
+ 
+ 	leds {
+@@ -374,11 +374,10 @@
+ 	status = "okay";
+ };
+ 
+-/* 4-wire RS232: TX/RX on PG6/PG7, RTS/CTS on PG8/PG9 */
++/* RS232: U-Boot uses TX/RX on PG6/PG7 only, RTS/CTS (PG8/PG9) are left to Linux */
+ &uart1 {
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
+-	uart-has-rtscts;
++	pinctrl-0 = <&uart1_pins>;
+ 	status = "okay";
+ };
+ 

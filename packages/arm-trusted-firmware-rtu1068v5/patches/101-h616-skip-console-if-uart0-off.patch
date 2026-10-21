@@ -1,0 +1,79 @@
+From: OpenWrt
+Subject: [PATCH] allwinner: h616: no console if the boot loader left UART0 off
+
+BL31 always registers its console on UART0. U-Boot SPL only enables the
+UART it uses as its own console, so on boards with the console on another
+UART (Teleofis RTU1068v5: UART1, RS-232) UART0 is still gated and held in
+reset when BL31 starts. The 16550 driver then polls the status register of
+an unclocked UART in putc and in the console_flush() before leaving BL31,
+and may never see the transmitter empty.
+
+Only register the console when UART0 is enabled in the CCU. Boards with
+the console on UART0 are not affected.
+
+--- a/plat/allwinner/sun50i_h616/include/sunxi_ccu.h
++++ b/plat/allwinner/sun50i_h616/include/sunxi_ccu.h
+@@ -7,6 +7,12 @@
+ #ifndef SUNXI_CCU_H
+ #define SUNXI_CCU_H
+
++#include <lib/utils_def.h>
++
++#define SUNXI_CCU_UART_BGR_REG		(SUNXI_CCU_BASE + 0x090c)
++#define SUNXI_CCU_UART0_GATE		BIT(0)
++#define SUNXI_CCU_UART0_RESET		BIT(16)
++
+ #define SUNXI_CCU_SEC_SWITCH_REG	(SUNXI_CCU_BASE + 0x0f00)
+
+ #define SUNXI_R_PRCM_SEC_SWITCH_REG	(SUNXI_R_PRCM_BASE + 0x0290)
+--- a/plat/allwinner/common/sunxi_bl31_setup.c
++++ b/plat/allwinner/common/sunxi_bl31_setup.c
+@@ -5,6 +5,7 @@
+  */
+
+ #include <assert.h>
++#include <stdbool.h>
+
+ #include <libfdt.h>
+
+@@ -22,6 +23,7 @@
+ #include <lib/mmio.h>
+ #include <plat/common/platform.h>
+
++#include <sunxi_ccu.h>
+ #include <sunxi_def.h>
+ #include <sunxi_mmap.h>
+ #include <sunxi_private.h>
+@@ -78,12 +80,30 @@ static void sunxi_find_dtb(void)
+ 	}
+ }
+
++/*
++ * U-Boot SPL only enables the UART it uses as its own console. If that is
++ * not UART0, the 16550 driver would poll the status register of an unclocked
++ * UART and could spin forever, so do without a console then.
++ */
++static bool sunxi_uart0_enabled(void)
++{
++#ifdef SUNXI_CCU_UART_BGR_REG
++	uint32_t mask = SUNXI_CCU_UART0_GATE | SUNXI_CCU_UART0_RESET;
++
++	return (mmio_read_32(SUNXI_CCU_UART_BGR_REG) & mask) == mask;
++#else
++	return true;
++#endif
++}
++
+ void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+ 				u_register_t arg2, u_register_t arg3)
+ {
+ 	/* Initialize the debug console as soon as possible */
+-	console_16550_register(SUNXI_UART0_BASE, SUNXI_UART0_CLK_IN_HZ,
+-			       SUNXI_UART0_BAUDRATE, &console);
++	if (sunxi_uart0_enabled()) {
++		console_16550_register(SUNXI_UART0_BASE, SUNXI_UART0_CLK_IN_HZ,
++				       SUNXI_UART0_BAUDRATE, &console);
++	}
+
+ #ifdef BL32_BASE
+ 	/* Populate entry point information for BL32 */

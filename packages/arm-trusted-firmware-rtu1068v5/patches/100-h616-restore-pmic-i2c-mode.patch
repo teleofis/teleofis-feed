@@ -1,0 +1,34 @@
+From: OpenWrt
+Subject: [PATCH] allwinner: h616: restore PMIC I2C mode when probing fails
+
+sunxi_pmic_setup() unconditionally switches the PMIC from I2C to RSB mode
+before it reads the chip ID. When the ID does not match the AXP305 the
+function bails out early, several lines before the "switch the PMIC back to
+I2C mode" write, so the PMIC is left on RSB for the rest of the boot.
+
+Boards with a different PMIC (e.g. the AXP15060 on the Teleofis RTU1068v5,
+which reports ID 0x44) are then unreachable on R_I2C for both U-Boot proper
+and Linux: the regulators never register, and every consumer of them -
+pinctrl supplies, MMC, EMAC - stays in deferred probe forever.
+
+Put the PMIC back into I2C mode on the error path as well. The RSB runtime
+address has already been assigned at that point, so the write goes through;
+if RSB failed earlier the write simply fails and the original error is
+still returned.
+
+--- a/plat/allwinner/sun50i_h616/sunxi_power.c
++++ b/plat/allwinner/sun50i_h616/sunxi_power.c
+@@ -79,6 +79,13 @@ int sunxi_pmic_setup(uint16_t socid, cons
+ 	ret = rsb_init();
+ 	if (ret) {
+ 		INFO("Could not init RSB: %d\n", ret);
++		/*
++		 * The PMIC has already been switched to RSB mode above, so put
++		 * it back into I2C mode before bailing out, otherwise U-Boot
++		 * and the kernel can no longer reach it on the R_I2C bus.
++		 */
++		axp_write(AXP20X_MODE_REG, AXP20X_MODE_I2C);
++
+ 		return ret;
+ 	}
+

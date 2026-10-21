@@ -1,0 +1,11 @@
+diff --git a/configs/teleofis_rtu1068v5_defconfig b/configs/teleofis_rtu1068v5_defconfig
+--- a/configs/teleofis_rtu1068v5_defconfig
++++ b/configs/teleofis_rtu1068v5_defconfig
+@@ -41,3 +41,7 @@
+ CONFIG_BOOTCOUNT_ENV=y
+ CONFIG_WATCHDOG_AUTOSTART=y
+ CONFIG_WDT_GPIO=y
++CONFIG_BOOTDELAY=3
++CONFIG_AUTOBOOT_KEYED=y
++CONFIG_AUTOBOOT_PROMPT="Type password to abort autoboot in %2d seconds\n"
++CONFIG_AUTOBOOT_STOP_STR="root"

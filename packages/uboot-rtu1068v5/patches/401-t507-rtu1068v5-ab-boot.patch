@@ -1,0 +1,89 @@
+diff --git a/configs/teleofis_rtu1068v5_defconfig b/configs/teleofis_rtu1068v5_defconfig
+--- a/configs/teleofis_rtu1068v5_defconfig
++++ b/configs/teleofis_rtu1068v5_defconfig
+@@ -29,3 +29,14 @@
+ CONFIG_AXP_ALDO5_VOLT=3300
+ CONFIG_AXP_DCDC2_VOLT=940
+ CONFIG_AXP_DCDC5_VOLT=1100
++CONFIG_ENV_SOURCE_FILE="teleofis_rtu1068v5"
++CONFIG_BOOTCOMMAND="run ab_boot"
++# CONFIG_ENV_IS_IN_FAT is not set
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_SYS_REDUNDAND_ENVIRONMENT=y
++CONFIG_ENV_SIZE=0x10000
++CONFIG_ENV_OFFSET=0x100000
++CONFIG_ENV_OFFSET_REDUND=0x120000
++CONFIG_BOOTCOUNT_LIMIT=y
++CONFIG_BOOTCOUNT_ENV=y
++CONFIG_WATCHDOG_AUTOSTART=y
+diff --git a/board/sunxi/teleofis_rtu1068v5.env b/board/sunxi/teleofis_rtu1068v5.env
+new file mode 100644
+--- /dev/null
++++ b/board/sunxi/teleofis_rtu1068v5.env
+@@ -0,0 +1,66 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++/*
++ * Teleofis RTU1068v5: A/B boot from the MMC device the board booted from
++ * (SD card or eMMC). MBR layout:
++ *   p1/p2 - slot A: kernel FIT (raw) / squashfs rootfs, overlay behind it
++ *   p3/p4 - slot B: the same
++ *
++ * ab_slot selects the active slot. OpenWrt sysupgrade writes the other slot,
++ * verifies it and only then sets ab_slot, upgrade_available=1, bootcount=0.
++ * While upgrade_available is set, BOOTCOUNT_ENV increments bootcount on every
++ * boot; once it exceeds bootlimit, altbootcmd rolls back to the other slot.
++ * Linux clears upgrade_available after a successful boot.
++ *
++ * A slot whose FIT cannot be read or fails hash verification is abandoned
++ * at once.
++ */
++
++bootlimit=3
++ab_slot=a
++ab_fit_addr=0x44000000
++
++ab_select=
++	if test "${ab_slot}" = "b"; then
++		setenv ab_kpart 3; setenv ab_rpart 4;
++	else
++		setenv ab_slot a; setenv ab_kpart 1; setenv ab_rpart 2;
++	fi
++
++ab_load=
++	run ab_select;
++	part start mmc ${mmc_bootdev} ${ab_kpart} ab_kstart &&
++	part size mmc ${mmc_bootdev} ${ab_kpart} ab_ksize &&
++	part uuid mmc ${mmc_bootdev}:${ab_rpart} ab_ruuid &&
++	mmc dev ${mmc_bootdev} &&
++	mmc read ${ab_fit_addr} ${ab_kstart} ${ab_ksize}
++
++ab_bootslot=
++	echo "A/B: booting slot ${ab_slot}";
++	run ab_load &&
++	setenv bootargs console=ttyS1,115200 root=PARTUUID=${ab_ruuid} rootwait debug ab_slot=${ab_slot} &&
++	bootm ${ab_fit_addr}
++
++ab_switch=
++	if test "${ab_slot}" = "b"; then setenv ab_slot a; else setenv ab_slot b; fi;
++	setenv upgrade_available; setenv bootcount; saveenv
++
++/*
++ * Save the environment once, so that fw_setenv in Linux always finds a valid
++ * one and never replaces it with its own built-in defaults.
++ */
++ab_boot=
++	if test -z "${ab_env_saved}"; then setenv ab_env_saved 1; saveenv; fi;
++	run ab_bootslot;
++	echo "A/B: slot ${ab_slot} is not bootable, switching to the other one";
++	run ab_switch;
++	run ab_bootslot;
++	echo "A/B: no bootable slot"
++
++altbootcmd=
++	echo "A/B: slot ${ab_slot} not confirmed after ${bootlimit} boots, rolling back";
++	run ab_switch;
++	run ab_boot
++
++/* TFTP from the U-Boot prompt */
++ipaddr=192.168.88.1
++serverip=192.168.88.11
