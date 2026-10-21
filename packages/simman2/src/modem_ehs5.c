@@ -224,5 +224,9 @@ struct modems_ops ehs5_ops = {
 		.set_mode			= modem_common_set_mode,
 		.set_apn			= modem_common_set_apn,
 		.set_pin			= modem_common_set_pin,
-		.set_auth			= modem_common_set_auth
+		.set_auth			= modem_common_set_auth,
+		.rsrp				= modem_common_rsrp,
+		.rsrq				= modem_common_rsrq,
+		.sinr				= modem_common_sinr,
+		.rssi				= modem_common_rssi
 };

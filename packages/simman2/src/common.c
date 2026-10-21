@@ -813,6 +813,18 @@ char *modem_summary(struct modems_ops *modem, uint8_t InfoParam, char *dev)
 		case INFO_OP:
 			modem->operator(b,dev);
 			break;
+		case INFO_RSRP:
+			modem->rsrp(b,dev);
+			break;
+		case INFO_RSRQ:
+			modem->rsrq(b,dev);
+			break;
+		case INFO_SINR:
+			modem->sinr(b,dev);
+			break;
+		case INFO_RSSI:
+			modem->rssi(b,dev);
+			break;
 		case INFO_IMEI:
 			if(modem->imei(b,dev)){
 				strcpy(b,"NONE");

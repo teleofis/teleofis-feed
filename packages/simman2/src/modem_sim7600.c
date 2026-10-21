@@ -346,6 +346,76 @@ int sim7600_power_up(struct settings_entry *settings){
 	return 0;
 }
 
+static int sim7600_cpsi_lte_field(char *receive, char *device, uint8_t field){
+	char buf[256]={0};
+
+	if(modem_common_send_at(device)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(modem_send_command(buf,device,"\rAT+CPSI?\r","OK")!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	if(cut_string(buf, "CPSI: ", "\r")!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(buf[0]!='L'){ // not LTE: these metrics are not reported
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	if(common_awk_f(buf,",",field)!=0){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+
+	strcpy(receive,buf);
+	return 0;
+}
+
+int sim7600_rsrp(char *receive, char *device){
+	int n;
+	if(sim7600_cpsi_lte_field(receive,device,12)!=0){
+		return -1; // receive already holds "N/A"
+	}
+	n = atoi(receive);
+	if(n==255){                         // 3GPP "unknown/not detectable"
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	sprintf(receive,"%d",n-141);        // 3GPP report index -> dBm
+	return 0;
+}
+
+int sim7600_rsrq(char *receive, char *device){
+	int n;
+	if(sim7600_cpsi_lte_field(receive,device,11)!=0){
+		return -1;
+	}
+	n = atoi(receive);
+	if(n==255){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	sprintf(receive,"%.1f",n*0.5-19.5); // 3GPP report index -> dB
+	return 0;
+}
+
+int sim7600_sinr(char *receive, char *device){
+	if(sim7600_cpsi_lte_field(receive,device,14)!=0){
+		return -1;
+	}
+	if(atoi(receive)==255){
+		strcpy(receive,"N/A");
+		return -1;
+	}
+	return 0; // RSSNR, reported directly in dB
+}
+
 struct modems_ops sim7600_ops = {
 		.name				= sim7600_name,
 		.init				= sim7600_init,
@@ -370,5 +440,9 @@ struct modems_ops sim7600_ops = {
 		.set_mode			= modem_common_set_mode,
 		.set_apn			= modem_common_set_apn,
 		.set_pin			= modem_common_set_pin,
-		.set_auth			= modem_common_set_auth
+		.set_auth			= modem_common_set_auth,
+		.rsrp				= sim7600_rsrp,
+		.rsrq				= sim7600_rsrq,
+		.sinr				= sim7600_sinr,
+		.rssi				= modem_common_rssi
 };
