@@ -10,14 +10,21 @@ case "$ACTION" in
             "$A7602" )
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.4" ]; then
                     DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
-                    ln -s /dev/$DEVICE_NAME /dev/ttyGSM1
-                    COMMAND="at+cgnsspwr=1,0,1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
-                    COMMAND="at+cgnsstst=1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/ttyGSM1
+                        ln -s /dev/$DEVICE_NAME /dev/ttyGSM1
+                        sleep 1
+                        COMMAND="at+cgnsspwr=1,0,1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                        COMMAND="at+cgnsstst=1" gcom -d /dev/ttyGSM1 -s /etc/simman2/runcommand.gcom
+                    fi
                     exit 0
                 fi
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.5" ]; then
                     DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
-                    ln -s /dev/$DEVICE_NAME /dev/ttyGSM2
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/ttyGSM2
+                        ln -s /dev/$DEVICE_NAME /dev/ttyGSM2
+                    fi
                     exit 0
                 fi
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.0" ]; then
@@ -27,19 +34,12 @@ case "$ACTION" in
                 fi
                 if [ "$DEVPATH" = "/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.3" ]; then
                     DEVICE_NAME=$(ls /sys$DEVPATH | grep tty)
-                    ln -s /dev/$DEVICE_NAME /dev/gps0
+                    if [ -n "$DEVICE_NAME" ]; then
+                        rm /dev/gps0
+                        ln -s /dev/$DEVICE_NAME /dev/gps0
+                    fi
                     exit 0
                 fi
-            ;;
-        esac
-    ;;
-    remove)
-        case "$PRODUCT" in 
-            "$A7602" )
-                rm /dev/ttyGSM1 
-                rm /dev/ttyGSM2
-                rm /dev/gps0
-                exit 0
             ;;
         esac
     ;;
