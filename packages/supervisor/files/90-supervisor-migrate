@@ -1,0 +1,12 @@
+#!/bin/sh
+
+[ -f /etc/config/event-handler ] || exit 0
+
+for opt in poe_gpio usb_gpio heat_gpio wd_gpio; do
+	val="$(uci -q get event-handler.@event-handler[0].$opt)"
+	[ -n "$val" ] && uci set supervisor.events.$opt="$val"
+done
+uci commit supervisor
+rm -f /etc/config/event-handler
+
+exit 0

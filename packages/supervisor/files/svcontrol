@@ -1,0 +1,24 @@
+#!/bin/sh
+
+. /usr/lib/supervisor/common.sh
+
+INTERVAL="$(sv_cfg main poll_interval 5)"
+RETRIES="$(sv_cfg main retries 2)"
+
+sv_alive() {
+	local n=0
+	while [ "$n" -lt "$RETRIES" ]; do
+		sv_get temp > /dev/null 2>&1 && return 0
+		n=$((n + 1))
+		[ "$n" -lt "$RETRIES" ] && sleep "$INTERVAL"
+	done
+	return 1
+}
+
+while sleep "$INTERVAL"; do
+	sv_alive && continue
+	echo "gd3x: svcontrol: i2c communication lost, sv will reboot" > /dev/kmsg
+	sv_reset
+done
+
+exit 0

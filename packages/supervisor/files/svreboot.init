@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+
+START=10
+STOP=90
+
+boot() {
+	. /usr/lib/supervisor/common.sh
+	sv_set system_reboot 0
+}
+
+shutdown() {
+	. /usr/lib/supervisor/common.sh
+	sv_set system_reboot 1
+}

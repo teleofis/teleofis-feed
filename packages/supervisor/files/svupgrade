@@ -1,0 +1,60 @@
+#!/bin/sh
+
+. /usr/lib/supervisor/common.sh
+. /usr/share/libubox/jshn.sh
+
+json_load "$(ubus call system board)"
+json_get_var MODEL model
+
+case "$MODEL" in
+	"TELEOFIS RTU1068V5")
+		FLASH_ADDR=0x8012000
+		FW=/lib/firmware/gd3x/rtu1068v5.gd3x.bin
+		I2C_DEV=/dev/i2c-1
+	;;
+	"TELEOFIS LT70" | "TELEOFIS LT70U")
+		FLASH_ADDR=0x8024000
+		FW=/lib/firmware/gd3x/lt7x.gd3x.bin
+		I2C_DEV=/dev/i2c-0
+		HEATER=1
+	;;
+esac
+
+BL_ADDR=0x22
+BL_RETRIES=5
+SERVICES="svcontrol event-handler"
+
+[ -e "$FW" ] || exit 0
+
+restore() {
+	[ -n "$HEATER" ] && sv_set heat_end_temp "$(sv_cfg main heat_end_temp 5)"
+	sync
+	for s in $SERVICES; do
+		/etc/init.d/$s start
+	done
+}
+
+for s in $SERVICES; do
+	/etc/init.d/$s stop
+done
+trap restore EXIT
+trap 'exit 1' INT TERM HUP
+
+sv_set fw_upgrade 1
+[ -n "$HEATER" ] && sv_set heat_end_temp 0
+
+count=0
+while [ "$count" -lt "$BL_RETRIES" ]; do
+	sleep 2
+	stm32flash -a $BL_ADDR $I2C_DEV && break
+	count=$((count + 1))
+done
+[ "$count" -lt "$BL_RETRIES" ] || exit 1
+
+sleep 1
+stm32flash -a $BL_ADDR -o -S $FLASH_ADDR $I2C_DEV
+sleep 1
+if stm32flash -a $BL_ADDR -w $FW -g $FLASH_ADDR -S $FLASH_ADDR $I2C_DEV; then
+	sleep 60
+	rm $FW
+fi

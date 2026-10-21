@@ -1,0 +1,30 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+json_load "$(ubus call system board)"
+json_get_var MODEL model
+
+case "$MODEL" in
+	"TELEOFIS RTU1068V5")
+		uci set supervisor.main.reset_gpio='101'
+		uci set supervisor.main.uart_tx_gpio='105'
+		uci set supervisor.main.uart_rx_gpio='104'
+		uci set supervisor.main.boot0_gpio='103'
+		uci set supervisor.main.boot1_gpio='100'
+		uci set supervisor.main.reset_b_gpio='97'
+		uci set supervisor.events.poe_gpio=''
+		uci set supervisor.events.usb_gpio=''
+		uci set supervisor.events.heat_gpio=''
+		uci set supervisor.events.wd_gpio=''
+	;;
+	"TELEOFIS LT70" | "TELEOFIS LT70U" | *)
+		uci set supervisor.main.reset_gpio='506'
+		uci set supervisor.events.poe_gpio='632'
+		uci set supervisor.events.usb_gpio='633'
+		uci set supervisor.events.heat_gpio='634'
+		uci set supervisor.events.wd_gpio='635'
+	;;
+esac
+uci commit supervisor
+
+exit 0

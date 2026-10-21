@@ -1,0 +1,65 @@
+#!/bin/sh
+
+. /usr/lib/supervisor/common.sh
+
+FW="$1"
+TX="$(sv_cfg main uart_tx_gpio)"
+RX="$(sv_cfg main uart_rx_gpio)"
+BOOT0="$(sv_cfg main boot0_gpio)"
+BOOT1="$(sv_cfg main boot1_gpio)"
+RST_B="$(sv_cfg main reset_b_gpio)"
+
+BAUD=57600
+POLL_CPU=3
+TTY=/dev/ttySOFT0
+SERVICES="svcontrol event-handler"
+
+if [ -z "$TX" ] || [ -z "$RX" ] || [ -z "$BOOT0" ] || [ -z "$BOOT1" ] || [ -z "$RST_B" ]; then
+	echo "svflash: gpios not configured" >&2
+	exit 1
+fi
+
+if [ ! -f "$FW" ]; then
+	echo "usage: $0 <firmware.bin>" >&2
+	exit 1
+fi
+
+gpio_set() {
+	[ -d /sys/class/gpio/gpio$1 ] || echo $1 > /sys/class/gpio/export
+	echo $2 > /sys/class/gpio/gpio$1/direction
+	sleep 0.2
+}
+
+sv_boot() {
+	gpio_set $BOOT0 $1
+	gpio_set $BOOT1 low
+	gpio_set $RST_B low
+	sv_reset
+	sleep 0.2
+}
+
+RT_RUNTIME="$(sysctl -n kernel.sched_rt_runtime_us)"
+
+restore() {
+	sv_boot low
+	rmmod soft_uart 2>/dev/null
+	sysctl -w kernel.sched_rt_runtime_us="$RT_RUNTIME" > /dev/null
+	for s in $SERVICES; do
+		/etc/init.d/$s start
+	done
+}
+
+for s in $SERVICES; do
+	/etc/init.d/$s stop
+done
+trap restore EXIT
+
+sysctl -w kernel.sched_rt_runtime_us=-1 > /dev/null
+rmmod soft_uart 2>/dev/null
+insmod soft_uart gpio_tx=$TX gpio_rx=$RX poll_cpu=$POLL_CPU || exit 1
+
+sv_boot high
+
+stm32flash -b $BAUD -k $TTY &&
+stm32flash -b $BAUD -o $TTY &&
+stm32flash -b $BAUD -w "$FW" -v -g 0x08000000 $TTY

@@ -7,10 +7,10 @@ case "$1" in
 	call)
 		case "$2" in
 			info)
-				input_voltage=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
-				voltage_threshold=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/voltage_threshold)
-				poe_out_control=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/poeout_control)
-				usb_power_control=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/usb_control)
+				input_voltage=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/input_voltage)
+				voltage_threshold=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/voltage_threshold)
+				poe_out_control=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/poeout_control)
+				usb_power_control=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/usb_control)
 
 				poe_out_power_gpio=$(uci -q get powersupply.system.poe_out_power_gpio)
 				poe_out_power=$(cat /sys/class/gpio/gpio$poe_out_power_gpio/value)

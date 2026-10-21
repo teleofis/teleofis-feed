@@ -65,7 +65,7 @@ case "$1" in
 		simman2_cli -d /dev/ttyGSM1 --get-plmn
 	;;
 	"voltage")
-		input_voltage=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/input_voltage)
+		input_voltage=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/input_voltage)
 		if [[ "$?" -ne "0" ]]; then
 			input_voltage="n/a"
 		else
@@ -74,7 +74,7 @@ case "$1" in
 		echo $input_voltage
 	;;
 	"temp")
-		temp=$(cat /sys/class/i2c-dev/i2c-0/device/0-0011/temp)
+		temp=$(cat /sys/bus/i2c/drivers/gd3x/*-0011/temp)
 		if [[ "$?" -ne "0" ]]; then
 			temp="n/a"
 		fi

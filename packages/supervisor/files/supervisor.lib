@@ -1,0 +1,25 @@
+sv_path() {
+	echo /sys/bus/i2c/drivers/gd3x/*-0011
+}
+
+sv_get() {
+	cat "$(sv_path)/$1"
+}
+
+sv_set() {
+	echo "$2" > "$(sv_path)/$1"
+}
+
+sv_cfg() {
+	local val
+	val="$(uci -q get supervisor.$1.$2)"
+	echo "${val:-$3}"
+}
+
+sv_reset() {
+	local gpio="$(sv_cfg main reset_gpio 506)"
+	[ -d /sys/class/gpio/gpio$gpio ] || echo $gpio > /sys/class/gpio/export
+	echo high > /sys/class/gpio/gpio$gpio/direction
+	sleep 1
+	echo low > /sys/class/gpio/gpio$gpio/direction
+}
