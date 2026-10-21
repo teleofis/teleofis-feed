@@ -406,7 +406,7 @@ index 0000000..a957494
 +#define CFG_SYS_INIT_SP_OFFSET	0x800000
 +
 +/* MMC */
-+#define MMC_SUPPORTS_TUNING
++
 +
 +/* NAND */
 +
