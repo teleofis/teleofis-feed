@@ -1,0 +1,1641 @@
+diff --git a/README.md b/README.md
+index 643fffa..322d70f 100644
+--- a/README.md
++++ b/README.md
+@@ -42,6 +42,12 @@ Module parameters:
+ 
+ * gpio_tx: int [default = 17]
+ * gpio_rx: int [default = 27]
++* burst_min_baudrate: int [default = 38400]
++* poll_cpu: int [default = -1, meaning disabled]
++* oversample: int [default = 16]
++* poll_headroom: int [default = 2]
++* poll_rt: bool [default = true]
++* poll_irqs_off: bool [default = true]
+ 
+ Loading the module with default parameters:
+ ```
+@@ -72,9 +78,37 @@ echo "hello" > /dev/ttySOFT0
+ 
+ ## Baud rate
+ 
+-When choosing the baud rate, take into account that:
+-* The Raspberry Pi is not very fast.
+-* You will probably not be running a real-time operating system.
+-* There will be other processes competing for CPU time.
++The way bits are shifted is picked from the baud rate:
+ 
+-As a result, you can expect communication errors when using fast baud rates. So I would not try to go any faster than 4800 bps.
++* Below `burst_min_baudrate`: one high-resolution timer tick per bit.
++* At `burst_min_baudrate` and above: burst mode, a whole frame is bit-banged with the local
++  interrupts disabled (260 us at 38400 bps, 87 us at 115200 bps). Set `burst_min_baudrate=0`
++  to turn it off.
++
++Up to 19200 bps is reliable in either mode. Above that TX is reliable in burst mode, RX depends
++on the interrupt latency of the board, and full duplex is not reliable.
++
++Framing and parity errors are reported to the TTY layer.
++
++
++## Polling mode
++
++Setting `poll_cpu` hands both RX and TX to a thread pinned to that CPU, which samples the line
++`oversample` times per bit. The interrupt latency no longer matters and full duplex works, but
++that CPU is busy 100% of the time while the port is open.
++
++```
++sudo sysctl -w kernel.sched_rt_runtime_us=-1
++sudo insmod soft_uart.ko poll_cpu=3
++```
++
++The `sysctl` is mandatory, otherwise the real-time thread is throttled for 50 ms every second.
++Moving the other interrupts off that CPU is recommended:
++
++```
++for f in /proc/irq/*/smp_affinity_list; do echo 0-2 > $f 2>/dev/null; done
++```
++
++The cost of one sample and the resulting number of samples per bit are logged in `dmesg`;
++`oversample` is lowered automatically if the board cannot keep up. On a slow board,
++`poll_headroom=1 oversample=6` is a reasonable starting point at 115200 bps.
+diff --git a/module.c b/module.c
+index eb6c8c5..bcc5a2a 100755
+--- a/module.c
++++ b/module.c
+@@ -26,11 +26,11 @@ module_param(gpio_rx, int, 0);
+ // Module prototypes.
+ static int  soft_uart_open(struct tty_struct*, struct file*);
+ static void soft_uart_close(struct tty_struct*, struct file*);
+-static int  soft_uart_write(struct tty_struct*, const unsigned char*, int);
++static ssize_t soft_uart_write(struct tty_struct*, const unsigned char*, size_t);
+ static unsigned int soft_uart_write_room(struct tty_struct*);
+ static void soft_uart_flush_buffer(struct tty_struct*);
+ static unsigned int soft_uart_chars_in_buffer(struct tty_struct*);
+-static void soft_uart_set_termios(struct tty_struct*, struct ktermios*);
++static void soft_uart_set_termios(struct tty_struct*, const struct ktermios*);
+ static void soft_uart_stop(struct tty_struct*);
+ static void soft_uart_start(struct tty_struct*);
+ static void soft_uart_hangup(struct tty_struct*);
+@@ -218,7 +218,7 @@ static void soft_uart_close(struct tty_struct* tty, struct file* file)
+  * @param buffer_size number of bytes contained in the given buffer
+  * @return number of bytes successfuly written into the TTY device
+  */
+-static int soft_uart_write(struct tty_struct* tty, const unsigned char* buffer, int buffer_size)
++static ssize_t soft_uart_write(struct tty_struct* tty, const unsigned char* buffer, size_t buffer_size)
+ {
+   return raspberry_soft_uart_send_string(buffer, buffer_size);
+ }
+@@ -234,11 +234,13 @@ static unsigned int soft_uart_write_room(struct tty_struct* tty)
+ }
+ 
+ /**
+- * Does nothing.
++ * Discards the characters waiting to be sent.
+  * @param tty
+  */
+ static void soft_uart_flush_buffer(struct tty_struct* tty)
+ {
++  raspberry_soft_uart_flush_tx_queue();
++  tty_wakeup(tty);
+ }
+ 
+ /**
+@@ -252,13 +254,15 @@ static unsigned int soft_uart_chars_in_buffer(struct tty_struct* tty)
+ }
+ 
+ /**
+- * Sets the UART parameters for a given TTY (only the baudrate is taken into account).
++ * Sets the UART parameters for a given TTY.
+  * @param tty given TTY
+  * @param termios parameters
+  */
+-static void soft_uart_set_termios(struct tty_struct* tty, struct ktermios* termios)
++static void soft_uart_set_termios(struct tty_struct* tty, const struct ktermios* termios)
+ {
+   int cflag = 0;
++  int data_bits;
++  int parity = SOFT_UART_PARITY_NONE;
+   speed_t baudrate = tty_get_baud_rate(tty);
+   printk(KERN_INFO "soft_uart: soft_uart_set_termios: baudrate = %d.\n", baudrate);
+ 
+@@ -269,22 +273,40 @@ static void soft_uart_set_termios(struct tty_struct* tty, struct ktermios* termi
+   cflag = tty->termios->c_cflag;
+ #endif
+ 
+-  // Verifies the number of data bits (it must be 8).
+-  if ((cflag & CSIZE) != CS8)
++  switch (cflag & CSIZE)
+   {
+-    printk(KERN_ALERT "soft_uart: Invalid number of data bits.\n");
++    case CS5:
++      data_bits = 5;
++      break;
++
++    case CS6:
++      data_bits = 6;
++      break;
++
++    case CS7:
++      data_bits = 7;
++      break;
++
++    default:
++      data_bits = 8;
++      break;
+   }
+-  
+-  // Verifies the number of stop bits (it must be 1).
+-  if (cflag & CSTOPB)
++
++  if (cflag & PARENB)
+   {
+-    printk(KERN_ALERT "soft_uart: Invalid number of stop bits.\n");
++    if (cflag & CMSPAR)
++    {
++      parity = (cflag & PARODD) ? SOFT_UART_PARITY_MARK : SOFT_UART_PARITY_SPACE;
++    }
++    else
++    {
++      parity = (cflag & PARODD) ? SOFT_UART_PARITY_ODD : SOFT_UART_PARITY_EVEN;
++    }
+   }
+-  
+-  // Verifies the parity (it must be none).
+-  if (cflag & PARENB)
++
++  if (!raspberry_soft_uart_set_frame_format(data_bits, parity, (cflag & CSTOPB) ? 2 : 1))
+   {
+-    printk(KERN_ALERT "soft_uart: Invalid parity.\n");
++    printk(KERN_ALERT "soft_uart: Invalid frame format.\n");
+   }
+   
+   // Configure the baudrate.
+diff --git a/raspberry_soft_uart.c b/raspberry_soft_uart.c
+index 7554d63..9989bb6 100755
+--- a/raspberry_soft_uart.c
++++ b/raspberry_soft_uart.c
+@@ -2,28 +2,186 @@
+ #include "raspberry_soft_uart.h"
+ #include "queue.h"
+ 
++#include <linux/bitops.h>
++#include <linux/completion.h>
+ #include <linux/gpio.h> 
+ #include <linux/hrtimer.h>
+ #include <linux/interrupt.h>
++#include <linux/kthread.h>
+ #include <linux/ktime.h>
++#include <linux/math64.h>
++#include <linux/module.h>
++#include <linux/nmi.h>
++#include <linux/processor.h>
++#include <linux/sched.h>
++#include <linux/spinlock.h>
+ #include <linux/tty.h>
+ #include <linux/tty_flip.h>
+ #include <linux/version.h>
++#include <linux/gpio/consumer.h>
+ 
+-static irq_handler_t handle_rx_start(unsigned int irq, void* device, struct pt_regs* registers);
++#define MAX_FRAME_BITS 12
++#define RX_BUFFER_SIZE 64
++#define CALIBRATION_LOOPS 10000
++#define MIN_OVERSAMPLE 3
++#define POLL_MAX_BUSY_NS 200000000ULL
++#define POLL_MAX_STREAM_NS 100000000ULL
++
++static irqreturn_t handle_rx_start(int irq, void* device);
+ static enum hrtimer_restart handle_tx(struct hrtimer* timer);
+ static enum hrtimer_restart handle_rx(struct hrtimer* timer);
+-static void receive_character(unsigned char character);
++static void receive_character(unsigned char character, char flag);
++static void recompute_poll_timing(int baudrate);
++static bool start_poll_thread(void);
++static void stop_poll_thread(void);
++static void flush_rx_buffer(void);
+ 
+ static struct queue queue_tx;
+ static struct tty_struct* current_tty = NULL;
+-static DEFINE_MUTEX(current_tty_mutex);
++static DEFINE_SPINLOCK(current_tty_lock);
+ static struct hrtimer timer_tx;
+ static struct hrtimer timer_rx;
+ static ktime_t period;
+ static int gpio_tx = 0;
+ static int gpio_rx = 0;
++static struct gpio_desc* desc_tx = NULL;
++static struct gpio_desc* desc_rx = NULL;
+ static int rx_bit_index = -1;
++static bool tx_running = false;
++static bool tx_busy = false;
++static int current_baudrate = 4800;
++
++struct frame_format
++{
++  int data_bits;
++  int parity;
++  int stop_slot;
++  int frame_bits;
++};
++
++static struct frame_format format =
++{
++  .data_bits  = 8,
++  .parity     = SOFT_UART_PARITY_NONE,
++  .stop_slot  = 9,
++  .frame_bits = 10,
++};
++
++static bool burst_mode = false;
++static u64 tx_edge_ns[MAX_FRAME_BITS + 1];
++static u64 rx_sample_ns[MAX_FRAME_BITS];
++
++static bool poll_enabled = false;
++static struct task_struct* poll_thread = NULL;
++static u64 bit_ns = 0;
++static u64 sample_ns = 0;
++static unsigned int samples_per_bit = 0;
++static struct completion poll_ready;
++static u64 sample_cost_ns = 0;
++static u64 gpio_cost_ns = 0;
++static u64 clock_cost_ns = 0;
++
++static volatile int calibration_sink = 0;
++
++static bool rx_in_frame = false;
++static u64 rx_frame_start = 0;
++static u64 rx_prev_sample = 0;
++static int rx_slot = 0;
++static u64 rx_slot_from = 0;
++static u64 rx_slot_to = 0;
++static int rx_votes_high = 0;
++static int rx_votes_total = 0;
++static bool rx_starved = false;
++static unsigned int rx_frame = 0;
++static struct frame_format rx_format;
++static unsigned char rx_buffer[RX_BUFFER_SIZE];
++static int rx_buffer_size = 0;
++
++static bool tx_in_frame = false;
++static u64 tx_frame_start = 0;
++static u64 tx_next_edge = 0;
++static int tx_slot = 0;
++static unsigned int tx_frame = 0;
++static int tx_frame_bits = 0;
++
++static unsigned int stat_rx_frames = 0;
++static unsigned int stat_rx_frame_errors = 0;
++static unsigned int stat_rx_parity_errors = 0;
++static unsigned int stat_rx_starved = 0;
++static u64 stat_rx_max_gap_ns = 0;
++static unsigned int stat_rx_long_gaps = 0;
++static u64 stat_rx_max_start_gap_ns = 0;
++static unsigned int stat_rx_late_starts = 0;
++static unsigned int stat_tx_frames = 0;
++static u64 stat_tx_max_late_ns = 0;
++static unsigned int stat_tx_late_edges = 0;
++static u64 stat_max_stream_ns = 0;
++
++static bool poll_irqs_disabled = false;
++static unsigned long poll_irq_flags;
++
++static bool poll_stream_open = false;
++static u64 poll_stream_since = 0;
++static u64 poll_stream_last = 0;
++
++static int burst_min_baudrate = 38400;
++module_param(burst_min_baudrate, int, 0644);
++MODULE_PARM_DESC(burst_min_baudrate,
++  "Lowest baudrate handled in burst mode, which bit-bangs a whole frame with the "
++  "interrupts disabled (0 = always use one timer tick per bit). At 38400 an 8N1 frame "
++  "keeps the interrupts disabled for 260 us, at 115200 for 87 us. Ignored when "
++  "poll_cpu is set.");
++
++static int poll_cpu = -1;
++module_param(poll_cpu, int, 0);
++MODULE_PARM_DESC(poll_cpu,
++  "CPU dedicated to polling the RX line (-1 = polling disabled). The polling "
++  "thread keeps that CPU busy 100% of the time while the port is open, and in "
++  "exchange nothing in the data path depends on the interrupt latency any more. "
++  "Requires 'sysctl -w kernel.sched_rt_runtime_us=-1'.");
++
++static int oversample = 16;
++module_param(oversample, int, 0);
++MODULE_PARM_DESC(oversample,
++  "Samples per bit taken in polling mode, 3 to 32. Lowered automatically when the "
++  "measured cost of a sample does not leave poll_headroom times that much room.");
++
++static int poll_headroom = 2;
++module_param(poll_headroom, int, 0);
++MODULE_PARM_DESC(poll_headroom,
++  "How many times the interval between two samples must exceed the measured cost "
++  "of taking one (default 2). Lowering it to 1 buys more samples per bit on a slow "
++  "board, at the risk of the loop not keeping up with its own grid.");
++
++static bool poll_rt = true;
++module_param(poll_rt, bool, 0);
++MODULE_PARM_DESC(poll_rt,
++  "Run the polling thread as SCHED_FIFO (default). Turning this off makes the "
++  "thread preemptible by ordinary tasks, which will corrupt frames.");
++
++static bool poll_irqs_off = true;
++module_param(poll_irqs_off, bool, 0);
++MODULE_PARM_DESC(poll_irqs_off,
++  "Disable the interrupts of the polling CPU for as long as a frame is on the line, "
++  "in either direction (default). Turning this off lets the timer tick and the other "
++  "interrupts of that CPU steal the samples of a frame and delay its edges.");
++
++/**
++ * Busy-waits until the monotonic clock reaches a given instant.
++ * @param deadline given instant, in nanoseconds
++ * @return the instant the wait actually ended
++ */
++static inline u64 wait_until(u64 deadline)
++{
++  u64 now;
++
++  while ((s64) ((now = ktime_get_ns()) - deadline) < 0)
++  {
++    cpu_relax();
++  }
++
++  return now;
++}
+ 
+ /**
+  * Initializes the Raspberry Soft UART infrastructure.
+@@ -38,8 +196,6 @@ int raspberry_soft_uart_init(const int _gpio_tx, const int _gpio_rx)
+ {
+   bool success = true;
+   
+-  mutex_init(&current_tty_mutex);
+-  
+   // Initializes the TX timer.
+   hrtimer_init(&timer_tx, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+   timer_tx.function = &handle_tx;
+@@ -57,12 +213,48 @@ int raspberry_soft_uart_init(const int _gpio_tx, const int _gpio_rx)
+ 
+   success &= gpio_request(gpio_rx, "soft_uart_rx") == 0;
+   success &= gpio_direction_input(gpio_rx) == 0;
++
++  desc_tx = gpio_to_desc(gpio_tx);
++  desc_rx = gpio_to_desc(gpio_rx);
++  success &= desc_tx != NULL;
++  success &= desc_rx != NULL;
++
++  if (poll_headroom < 1)
++  {
++    poll_headroom = 1;
++  }
++
++  if (oversample < MIN_OVERSAMPLE)
++  {
++    oversample = MIN_OVERSAMPLE;
++  }
++  else if (oversample > 32)
++  {
++    oversample = 32;
++  }
++
++  if (poll_cpu >= 0)
++  {
++    if (poll_cpu < nr_cpu_ids && cpu_online(poll_cpu))
++    {
++      poll_enabled = true;
++      printk(KERN_INFO "soft_uart: polling mode on CPU %d, %d samples per bit.\n",
++        poll_cpu, oversample);
++    }
++    else
++    {
++      printk(KERN_ALERT "soft_uart: CPU %d is not available, polling disabled.\n",
++        poll_cpu);
++    }
++  }
++
++  raspberry_soft_uart_set_baudrate(4800);
+   
+   // Initializes the interruption.
+   success &= request_irq(
+     gpio_to_irq(gpio_rx),
+-    (irq_handler_t) handle_rx_start,
+-    IRQF_TRIGGER_FALLING,
++    handle_rx_start,
++    IRQF_TRIGGER_FALLING | IRQF_NO_THREAD,
+     "soft_uart_irq_handler",
+     NULL) == 0;
+   disable_irq(gpio_to_irq(gpio_rx));
+@@ -90,17 +282,41 @@ int raspberry_soft_uart_finalize(void)
+ int raspberry_soft_uart_open(struct tty_struct* tty)
+ {
+   int success = 0;
+-  mutex_lock(&current_tty_mutex);
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
+   if (current_tty == NULL)
+   {
+     current_tty = tty;
+     initialize_queue(&queue_tx);
+     success = 1;
+     rx_bit_index = -1;
++    tx_running = false;
++    tx_busy = false;
++  }
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  if (!success)
++  {
++    return 0;
++  }
++
++  if (poll_enabled)
++  {
++    if (!start_poll_thread())
++    {
++      spin_lock_irqsave(&current_tty_lock, flags);
++      current_tty = NULL;
++      spin_unlock_irqrestore(&current_tty_lock, flags);
++      return 0;
++    }
++  }
++  else
++  {
+     enable_irq(gpio_to_irq(gpio_rx));
+   }
+-  mutex_unlock(&current_tty_mutex);
+-  return success;
++
++  return 1;
+ }
+ 
+ /**
+@@ -109,28 +325,141 @@ int raspberry_soft_uart_open(struct tty_struct* tty)
+ int raspberry_soft_uart_close(void)
+ {
+   int success = 0;
+-  mutex_lock(&current_tty_mutex);
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
+   if (current_tty != NULL)
+   {
+-    disable_irq(gpio_to_irq(gpio_rx));
+-    hrtimer_cancel(&timer_tx);
+-    hrtimer_cancel(&timer_rx);
+     current_tty = NULL;
+     success = 1;
+   }
+-  mutex_unlock(&current_tty_mutex);
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  if (success)
++  {
++    if (poll_enabled)
++    {
++      stop_poll_thread();
++    }
++    else
++    {
++      disable_irq(gpio_to_irq(gpio_rx));
++      hrtimer_cancel(&timer_tx);
++      hrtimer_cancel(&timer_rx);
++    }
++
++    rx_bit_index = -1;
++    tx_running = false;
++    tx_busy = false;
++  }
++
+   return success;
+ }
+ 
+ /**
++ * Recomputes the polling time grid for a given baudrate.
++ * @param baudrate given baudrate
++ */
++static void recompute_poll_timing(int baudrate)
++{
++  bit_ns = div_u64(1000000000ULL, (u32) baudrate);
++  samples_per_bit = oversample;
++
++  if (sample_cost_ns > 0)
++  {
++    u64 affordable = div_u64(bit_ns, (u32) (poll_headroom * sample_cost_ns));
++
++    if (affordable < MIN_OVERSAMPLE)
++    {
++      affordable = MIN_OVERSAMPLE;
++    }
++
++    if (samples_per_bit > affordable)
++    {
++      samples_per_bit = (unsigned int) affordable;
++    }
++  }
++
++  sample_ns = div_u64(bit_ns, samples_per_bit);
++}
++
++/**
+  * Sets the Soft UART baudrate.
+  * @param baudrate desired baudrate
+  * @return 1 if the operation is successful. 0 otherwise.
+  */
+ int raspberry_soft_uart_set_baudrate(const int baudrate) 
+ {
++  unsigned long flags;
++  int i;
++
++  if (baudrate <= 0)
++  {
++    return 0;
++  }
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++
++  current_baudrate = baudrate;
+   period = ktime_set(0, 1000000000/baudrate);
+-  gpio_set_debounce(gpio_rx, 1000/baudrate/2);
++
++  for (i = 0; i <= MAX_FRAME_BITS; i++)
++  {
++    tx_edge_ns[i] = div_u64((u64) i * 1000000000ULL, (u32) baudrate);
++  }
++
++  for (i = 0; i < MAX_FRAME_BITS; i++)
++  {
++    rx_sample_ns[i] = div_u64(((u64) i * 2 + 1) * 1000000000ULL, (u32) baudrate * 2);
++  }
++
++  burst_mode = burst_min_baudrate > 0 && baudrate >= burst_min_baudrate;
++  recompute_poll_timing(baudrate);
++
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  if (poll_enabled)
++  {
++    printk(KERN_INFO "soft_uart: baudrate = %d, polling mode, %u samples per bit "
++      "(%llu ns).\n", baudrate, samples_per_bit, sample_ns);
++  }
++  else
++  {
++    printk(KERN_INFO "soft_uart: baudrate = %d, %s mode, frame = %llu ns.\n",
++      baudrate, burst_mode ? "burst" : "per-bit", tx_edge_ns[format.frame_bits]);
++  }
++
++  return 1;
++}
++
++/**
++ * Sets the Soft UART frame format.
++ * @param data_bits number of data bits, 5 to 8
++ * @param parity one of the SOFT_UART_PARITY_* modes
++ * @param stop_bits number of stop bits, 1 or 2
++ * @return 1 if the operation is successful. 0 otherwise.
++ */
++int raspberry_soft_uart_set_frame_format(const int data_bits, const int parity, const int stop_bits)
++{
++  unsigned long flags;
++
++  if (data_bits < 5 || data_bits > 8
++    || parity < SOFT_UART_PARITY_NONE || parity > SOFT_UART_PARITY_SPACE
++    || stop_bits < 1 || stop_bits > 2)
++  {
++    return 0;
++  }
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  format.data_bits = data_bits;
++  format.parity = parity;
++  format.stop_slot = 1 + data_bits + (parity != SOFT_UART_PARITY_NONE ? 1 : 0);
++  format.frame_bits = format.stop_slot + stop_bits;
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  printk(KERN_INFO "soft_uart: frame format = %d%c%d.\n",
++    data_bits, "NEOMS"[parity], stop_bits);
++
+   return 1;
+ }
+ 
+@@ -142,10 +471,22 @@ int raspberry_soft_uart_set_baudrate(const int baudrate)
+  */
+ int raspberry_soft_uart_send_string(const unsigned char* string, int string_size)
+ {
+-  int result = enqueue_string(&queue_tx, string, string_size);
+-  
++  int result;
++  bool must_start_timer = false;
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  result = enqueue_string(&queue_tx, string, string_size);
++
+   // Starts the TX timer if it is not already running.
+-  if (!hrtimer_active(&timer_tx))
++  if (!poll_enabled && result > 0 && !tx_running)
++  {
++    tx_running = true;
++    must_start_timer = true;
++  }
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  if (must_start_timer)
+   {
+     hrtimer_start(&timer_tx, period, HRTIMER_MODE_REL);
+   }
+@@ -159,7 +500,14 @@ int raspberry_soft_uart_send_string(const unsigned char* string, int string_size
+  */
+ int raspberry_soft_uart_get_tx_queue_room(void)
+ {
+-  return get_queue_room(&queue_tx);
++  int room;
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  room = get_queue_room(&queue_tx);
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  return room;
+ }
+ 
+ /*
+@@ -168,7 +516,26 @@ int raspberry_soft_uart_get_tx_queue_room(void)
+  */
+ int raspberry_soft_uart_get_tx_queue_size(void)
+ {
+-  return get_queue_size(&queue_tx);
++  int size;
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  size = get_queue_size(&queue_tx) + (tx_busy ? 1 : 0);
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  return size;
++}
++
++/**
++ * Discards the characters waiting in the TX queue.
++ */
++void raspberry_soft_uart_flush_tx_queue(void)
++{
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  initialize_queue(&queue_tx);
++  spin_unlock_irqrestore(&current_tty_lock, flags);
+ }
+ 
+ //-----------------------------------------------------------------------------
+@@ -176,16 +543,201 @@ int raspberry_soft_uart_get_tx_queue_size(void)
+ //-----------------------------------------------------------------------------
+ 
+ /**
+- * If we are waiting for the RX start bit, then starts the RX timer. Otherwise,
+- * does nothing.
++ * Computes the parity bit of a given character.
++ * @param character given character
++ * @param f frame format
++ * @return level of the parity bit
+  */
+-static irq_handler_t handle_rx_start(unsigned int irq, void* device, struct pt_regs* registers)
++static unsigned int parity_bit(unsigned char character, const struct frame_format* f)
+ {
+-  if (rx_bit_index == -1)
++  switch (f->parity)
++  {
++    case SOFT_UART_PARITY_EVEN:
++      return hweight8(character) & 1;
++
++    case SOFT_UART_PARITY_ODD:
++      return !(hweight8(character) & 1);
++
++    case SOFT_UART_PARITY_MARK:
++      return 1;
++
++    default:
++      return 0;
++  }
++}
++
++/**
++ * Lays a given character out as a frame.
++ * @param character given character
++ * @param f frame format
++ * @return the frame, bit i being the level of slot i
++ */
++static unsigned int encode_frame(unsigned char character, const struct frame_format* f)
++{
++  unsigned int frame;
++
++  character &= (1 << f->data_bits) - 1;
++  frame = (unsigned int) character << 1;
++
++  if (f->parity != SOFT_UART_PARITY_NONE)
++  {
++    frame |= parity_bit(character, f) << (f->stop_slot - 1);
++  }
++
++  return frame | (~0U << f->stop_slot);
++}
++
++/**
++ * Extracts the character from a received frame and checks it.
++ * @param frame received frame
++ * @param f format the frame was received with
++ * @param character where the character is stored
++ * @return TTY_NORMAL, TTY_FRAME or TTY_PARITY
++ */
++static char decode_frame(unsigned int frame, const struct frame_format* f, unsigned char* character)
++{
++  *character = (frame >> 1) & ((1 << f->data_bits) - 1);
++
++  if (!(1 & (frame >> f->stop_slot)))
++  {
++    return TTY_FRAME;
++  }
++
++  if (f->parity != SOFT_UART_PARITY_NONE
++    && (1 & (frame >> (f->stop_slot - 1))) != parity_bit(*character, f))
++  {
++    return TTY_PARITY;
++  }
++
++  return TTY_NORMAL;
++}
++
++/**
++ * Takes the next character off the TX queue and lays it out as a frame.
++ * @param frame where the frame is stored
++ * @param frame_bits where the number of bit slots of the frame is stored
++ * @return true if there was a character to send.
++ */
++static bool dequeue_frame(unsigned int* frame, int* frame_bits)
++{
++  unsigned char character;
++
++  tx_busy = dequeue_character(&queue_tx, &character);
++  if (!tx_busy)
++  {
++    return false;
++  }
++
++  *frame = encode_frame(character, &format);
++  *frame_bits = format.frame_bits;
++  return true;
++}
++
++/**
++ * Decides whether the processes waiting to write are due a wakeup.
++ * @return the TTY to hand to wake_up_writers(), or NULL.
++ */
++static struct tty_struct* get_tty_to_wake(void)
++{
++  if (current_tty == NULL || get_queue_size(&queue_tx) > QUEUE_MAX_SIZE / 2)
++  {
++    return NULL;
++  }
++
++  return tty_kref_get(current_tty);
++}
++
++/**
++ * Wakes up the processes waiting to write to a given TTY and drops the
++ * reference to it.
++ * @param tty TTY returned by get_tty_to_wake(), or NULL
++ */
++static void wake_up_writers(struct tty_struct* tty)
++{
++  if (tty != NULL)
++  {
++    tty_wakeup(tty);
++    tty_kref_put(tty);
++  }
++}
++
++/**
++ * Bit-bangs a whole frame with the local interrupts disabled.
++ * @param frame given frame
++ * @param frame_bits number of bit slots of the frame
++ */
++static void send_frame(unsigned int frame, int frame_bits)
++{
++  unsigned long flags;
++  u64 frame_start;
++  int i;
++
++  local_irq_save(flags);
++  frame_start = ktime_get_ns();
++
++  gpiod_set_raw_value(desc_tx, 0);
++
++  for (i = 1; i < frame_bits; i++)
++  {
++    wait_until(frame_start + tx_edge_ns[i]);
++    gpiod_set_raw_value(desc_tx, 1 & (frame >> i));
++  }
++
++  wait_until(frame_start + tx_edge_ns[frame_bits]);
++
++  local_irq_restore(flags);
++}
++
++/**
++ * Reads a whole frame, sampling every bit at the centre of its slot.
++ */
++static void receive_frame(void)
++{
++  u64 frame_start = ktime_get_ns();
++  struct frame_format f = format;
++  unsigned int frame = 0;
++  unsigned char character;
++  char flag;
++  int i;
++
++  if (gpiod_get_raw_value(desc_rx))
++  {
++    return;
++  }
++
++  wait_until(frame_start + rx_sample_ns[0]);
++  if (gpiod_get_raw_value(desc_rx))
++  {
++    return;
++  }
++
++  for (i = 1; i <= f.stop_slot; i++)
++  {
++    wait_until(frame_start + rx_sample_ns[i]);
++    if (gpiod_get_raw_value(desc_rx))
++    {
++      frame |= 1 << i;
++    }
++  }
++
++  flag = decode_frame(frame, &f, &character);
++  receive_character(character, flag);
++}
++
++/**
++ * Receives a frame in burst mode, otherwise starts the RX timer.
++ */
++static irqreturn_t handle_rx_start(int irq, void* device)
++{
++  if (burst_mode)
++  {
++    receive_frame();
++  }
++  else if (rx_bit_index == -1)
+   {
+     hrtimer_start(&timer_rx, ktime_set(0, period / 2), HRTIMER_MODE_REL);
+   }
+-  return (irq_handler_t) IRQ_HANDLED;
++  return IRQ_HANDLED;
+ }
+ 
+ 
+@@ -195,37 +747,72 @@ static irq_handler_t handle_rx_start(unsigned int irq, void* device, struct pt_r
+ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
+ {
+   ktime_t current_time = ktime_get();
+-  static unsigned char character = 0;
++  static unsigned int frame = 0;
++  static int frame_bits = 0;
+   static int bit_index = -1;
+   enum hrtimer_restart result = HRTIMER_NORESTART;
+   bool must_restart_timer = false;
++  struct tty_struct* tty = NULL;
++  unsigned long flags;
++
++  if (burst_mode)
++  {
++    spin_lock_irqsave(&current_tty_lock, flags);
++    must_restart_timer = dequeue_frame(&frame, &frame_bits);
++    if (!must_restart_timer)
++    {
++      tx_running = false;
++    }
++    tty = get_tty_to_wake();
++    spin_unlock_irqrestore(&current_tty_lock, flags);
++
++    if (must_restart_timer)
++    {
++      send_frame(frame, frame_bits);
++
++      hrtimer_forward_now(&timer_tx, ktime_set(0, tx_edge_ns[1]));
++      result = HRTIMER_RESTART;
++    }
++
++    wake_up_writers(tty);
++    return result;
++  }
+   
+   // Start bit.
+   if (bit_index == -1)
+   {
+-    if (dequeue_character(&queue_tx, &character))
++    spin_lock_irqsave(&current_tty_lock, flags);
++    must_restart_timer = dequeue_frame(&frame, &frame_bits);
++    if (!must_restart_timer)
++    {
++      tx_running = false;
++    }
++    tty = get_tty_to_wake();
++    spin_unlock_irqrestore(&current_tty_lock, flags);
++
++    if (must_restart_timer)
+     {
+-      gpio_set_value(gpio_tx, 0);
+-      bit_index++;
+-      must_restart_timer = true;
++      gpiod_set_raw_value(desc_tx, 0);
++      bit_index = 1;
+     }
++
++    wake_up_writers(tty);
+   }
+   
+   // Data bits.
+-  else if (0 <= bit_index && bit_index < 8)
++  else if (bit_index < frame_bits - 1)
+   {
+-    gpio_set_value(gpio_tx, 1 & (character >> bit_index));
++    gpiod_set_raw_value(desc_tx, 1 & (frame >> bit_index));
+     bit_index++;
+     must_restart_timer = true;
+   }
+   
+   // Stop bit.
+-  else if (bit_index == 8)
++  else
+   {
+-    gpio_set_value(gpio_tx, 1);
+-    character = 0;
++    gpiod_set_raw_value(desc_tx, 1);
+     bit_index = -1;
+-    must_restart_timer = get_queue_size(&queue_tx) > 0;
++    must_restart_timer = true;
+   }
+   
+   // Restarts the TX timer.
+@@ -244,40 +831,45 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
+ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
+ {
+   ktime_t current_time = ktime_get();
+-  static unsigned int character = 0;
+-  int bit_value = gpio_get_value(gpio_rx);
++  static unsigned int frame = 0;
++  static struct frame_format f;
++  unsigned char character;
++  char flag;
++  int bit_value = gpiod_get_raw_value(desc_rx);
+   enum hrtimer_restart result = HRTIMER_NORESTART;
+   bool must_restart_timer = false;
+   
+   // Start bit.
+   if (rx_bit_index == -1)
+   {
+-    rx_bit_index++;
+-    character = 0;
++    f = format;
++    frame = 0;
++    rx_bit_index = 1;
+     must_restart_timer = true;
+   }
+   
+   // Data bits.
+-  else if (0 <= rx_bit_index && rx_bit_index < 8)
++  else if (rx_bit_index < f.stop_slot)
+   {
+-    if (bit_value == 0)
+-    {
+-      character &= 0xfeff;
+-    }
+-    else
++    if (bit_value)
+     {
+-      character |= 0x0100;
++      frame |= 1 << rx_bit_index;
+     }
+     
+     rx_bit_index++;
+-    character >>= 1;
+     must_restart_timer = true;
+   }
+   
+   // Stop bit.
+-  else if (rx_bit_index == 8)
++  else
+   {
+-    receive_character(character);
++    if (bit_value)
++    {
++      frame |= 1 << rx_bit_index;
++    }
++
++    flag = decode_frame(frame, &f, &character);
++    receive_character(character, flag);
+     rx_bit_index = -1;
+   }
+   
+@@ -295,22 +887,567 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
+  * Adds a given (received) character to the RX buffer, which is managed by the kernel,
+  * and then flushes (flip) it.
+  * @param character given character
++ * @param flag TTY_NORMAL, TTY_FRAME or TTY_PARITY
+  */
+-void receive_character(unsigned char character)
++void receive_character(unsigned char character, char flag)
+ {
+-  mutex_lock(&current_tty_mutex);
++  unsigned long flags;
++
++  spin_lock_irqsave(&current_tty_lock, flags);
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
+   if (current_tty != NULL && current_tty->port != NULL)
+   {
+-    tty_insert_flip_char(current_tty->port, character, TTY_NORMAL);
++    tty_insert_flip_char(current_tty->port, character, flag);
+     tty_flip_buffer_push(current_tty->port);
+   }
+ #else
+-  if (tty != NULL)
++  if (current_tty != NULL)
+   {
+-    tty_insert_flip_char(current_tty, character, TTY_NORMAL);
+-    tty_flip_buffer_push(tty);
++    tty_insert_flip_char(current_tty, character, flag);
++    tty_flip_buffer_push(current_tty);
+   }
+ #endif
+-  mutex_unlock(&current_tty_mutex);
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++}
++
++/**
++ * Disables the interrupts of the polling CPU.
++ */
++static void disable_poll_irqs(void)
++{
++  if (poll_irqs_off && !poll_irqs_disabled)
++  {
++    local_irq_save(poll_irq_flags);
++    poll_irqs_disabled = true;
++  }
++}
++
++/**
++ * Lets the interrupts of the polling CPU in again.
++ */
++static void enable_poll_irqs(void)
++{
++  if (poll_irqs_disabled)
++  {
++    poll_irqs_disabled = false;
++    local_irq_restore(poll_irq_flags);
++  }
++}
++
++/**
++ * Ends the current stream, if any, and lets the interrupts of the polling CPU
++ * in again.
++ * @param now current instant
++ */
++static void close_poll_stream(u64 now)
++{
++  if (poll_stream_open)
++  {
++    if (now - poll_stream_since > stat_max_stream_ns)
++    {
++      stat_max_stream_ns = now - poll_stream_since;
++    }
++
++    poll_stream_open = false;
++  }
++
++  enable_poll_irqs();
++}
++
++/**
++ * Clears the polling statistics.
++ */
++static void reset_poll_stats(void)
++{
++  stat_rx_frames = 0;
++  stat_rx_frame_errors = 0;
++  stat_rx_parity_errors = 0;
++  stat_rx_starved = 0;
++  stat_rx_max_gap_ns = 0;
++  stat_rx_long_gaps = 0;
++  stat_rx_max_start_gap_ns = 0;
++  stat_rx_late_starts = 0;
++  stat_tx_frames = 0;
++  stat_tx_max_late_ns = 0;
++  stat_tx_late_edges = 0;
++  stat_max_stream_ns = 0;
++}
++
++/**
++ * Logs the polling statistics.
++ */
++static void log_poll_stats(void)
++{
++  printk(KERN_INFO "soft_uart: rx %u frames, %u frame errors, %u parity errors, "
++    "%u starved.\n",
++    stat_rx_frames, stat_rx_frame_errors, stat_rx_parity_errors, stat_rx_starved);
++  printk(KERN_INFO "soft_uart: rx longest gap %llu ns inside a frame (%u over a quarter "
++    "bit), %llu ns at a start bit (%u over a quarter bit).\n",
++    stat_rx_max_gap_ns, stat_rx_long_gaps, stat_rx_max_start_gap_ns, stat_rx_late_starts);
++  printk(KERN_INFO "soft_uart: tx %u frames, latest edge %llu ns after its deadline (%u "
++    "over a quarter bit); longest stream %llu ns.\n",
++    stat_tx_frames, stat_tx_max_late_ns, stat_tx_late_edges, stat_max_stream_ns);
++}
++
++/**
++ * Hands the buffered characters over to the TTY layer.
++ */
++static void flush_rx_buffer(void)
++{
++  unsigned long flags;
++
++  if (rx_buffer_size == 0)
++  {
++    return;
++  }
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  if (current_tty != NULL && current_tty->port != NULL)
++  {
++    tty_insert_flip_string(current_tty->port, rx_buffer, rx_buffer_size);
++    tty_flip_buffer_push(current_tty->port);
++  }
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  rx_buffer_size = 0;
++}
++
++/**
++ * Buffers a received character.
++ * @param character given character
++ * @param flag TTY_NORMAL, TTY_FRAME or TTY_PARITY
++ */
++static void buffer_character(unsigned char character, char flag)
++{
++  if (flag != TTY_NORMAL)
++  {
++    flush_rx_buffer();
++    receive_character(character, flag);
++    return;
++  }
++
++  rx_buffer[rx_buffer_size++] = character;
++
++  if (rx_buffer_size == RX_BUFFER_SIZE)
++  {
++    flush_rx_buffer();
++  }
++}
++
++/**
++ * Opens the vote for a given bit slot of the frame being received.
++ * @param slot given bit slot
++ */
++static void open_rx_slot(int slot)
++{
++  u64 slot_start = rx_frame_start + (u64) slot * bit_ns;
++
++  rx_slot = slot;
++  rx_slot_from = slot_start + bit_ns / 4;
++  rx_slot_to = slot_start + (3 * bit_ns) / 4;
++  rx_votes_high = 0;
++  rx_votes_total = 0;
++}
++
++/**
++ * Closes the vote for the current bit slot and moves on.
++ * @return true if the frame is still being received.
++ */
++static bool close_rx_slot(void)
++{
++  bool high;
++  unsigned char character;
++  char flag;
++
++  if (rx_votes_total == 0)
++  {
++    rx_starved = true;
++    high = true;
++  }
++  else
++  {
++    high = rx_votes_high * 2 > rx_votes_total;
++  }
++
++  if (rx_slot == 0)
++  {
++    if (high)
++    {
++      return false;
++    }
++  }
++
++  else if (high)
++  {
++    rx_frame |= 1 << rx_slot;
++  }
++
++  if (rx_slot == rx_format.stop_slot)
++  {
++    flag = decode_frame(rx_frame, &rx_format, &character);
++    stat_rx_frames++;
++
++    if (rx_starved)
++    {
++      stat_rx_starved++;
++    }
++    else if (flag == TTY_FRAME)
++    {
++      stat_rx_frame_errors++;
++    }
++    else if (flag == TTY_PARITY)
++    {
++      stat_rx_parity_errors++;
++    }
++
++    buffer_character(character, rx_starved ? TTY_FRAME : flag);
++    return false;
++  }
++
++  open_rx_slot(rx_slot + 1);
++  return true;
++}
++
++/**
++ * Feeds one sample of the RX line into the receiver.
++ * @param now instant the sample was taken
++ * @param level level of the RX line
++ */
++static void poll_rx_step(u64 now, int level)
++{
++  u64 gap = now - rx_prev_sample;
++  bool long_gap = gap > bit_ns / 4;
++
++  if (rx_in_frame)
++  {
++    if (gap > stat_rx_max_gap_ns)
++    {
++      stat_rx_max_gap_ns = gap;
++    }
++
++    if (long_gap)
++    {
++      stat_rx_long_gaps++;
++    }
++  }
++
++  while (rx_in_frame && (s64) (now - rx_slot_to) >= 0)
++  {
++    rx_in_frame = close_rx_slot();
++  }
++
++  if (rx_in_frame)
++  {
++    if ((s64) (now - rx_slot_from) >= 0)
++    {
++      rx_votes_total++;
++      if (level)
++      {
++        rx_votes_high++;
++      }
++    }
++  }
++
++  else if (!level)
++  {
++    if (gap > stat_rx_max_start_gap_ns)
++    {
++      stat_rx_max_start_gap_ns = gap;
++    }
++
++    if (long_gap)
++    {
++      stat_rx_late_starts++;
++    }
++
++    rx_frame_start = rx_prev_sample + (now - rx_prev_sample) / 2;
++    rx_frame = 0;
++    rx_format = format;
++    rx_starved = false;
++    rx_in_frame = true;
++    open_rx_slot(0);
++  }
++
++  rx_prev_sample = now;
++}
++
++/**
++ * Drives the TX line on the same time grid as the receiver.
++ * @param now instant of the current sample
++ */
++static void poll_tx_step(u64 now)
++{
++  struct tty_struct* tty;
++  unsigned long flags;
++  u64 late;
++
++  if (!tx_in_frame)
++  {
++    if (READ_ONCE(queue_tx.size) <= 0)
++    {
++      return;
++    }
++
++    spin_lock_irqsave(&current_tty_lock, flags);
++    tx_in_frame = dequeue_frame(&tx_frame, &tx_frame_bits);
++    spin_unlock_irqrestore(&current_tty_lock, flags);
++
++    if (!tx_in_frame)
++    {
++      return;
++    }
++
++    gpiod_set_raw_value(desc_tx, 0);
++    tx_frame_start = now;
++    tx_slot = 0;
++    tx_next_edge = now + bit_ns;
++    stat_tx_frames++;
++    return;
++  }
++
++  if ((s64) (now - tx_next_edge) < 0)
++  {
++    return;
++  }
++
++  tx_slot++;
++
++  if (tx_slot < tx_frame_bits)
++  {
++    gpiod_set_raw_value(desc_tx, 1 & (tx_frame >> tx_slot));
++
++    late = now - tx_next_edge;
++    if (late > stat_tx_max_late_ns)
++    {
++      stat_tx_max_late_ns = late;
++    }
++
++    if (late > bit_ns / 4)
++    {
++      stat_tx_late_edges++;
++    }
++  }
++
++  else
++  {
++    spin_lock_irqsave(&current_tty_lock, flags);
++    tx_busy = false;
++    tty = get_tty_to_wake();
++    spin_unlock_irqrestore(&current_tty_lock, flags);
++
++    tx_in_frame = false;
++    wake_up_writers(tty);
++    return;
++  }
++
++  tx_next_edge = tx_frame_start + (u64) (tx_slot + 1) * bit_ns;
++}
++
++/**
++ * Resets both polling state machines.
++ */
++static void reset_poll_state(void)
++{
++  struct tty_struct* tty;
++  unsigned long flags;
++
++  rx_in_frame = false;
++  rx_starved = false;
++  rx_buffer_size = 0;
++  rx_prev_sample = ktime_get_ns();
++  tx_in_frame = false;
++  gpiod_set_raw_value(desc_tx, 1);
++
++  spin_lock_irqsave(&current_tty_lock, flags);
++  tx_busy = false;
++  tty = get_tty_to_wake();
++  spin_unlock_irqrestore(&current_tty_lock, flags);
++
++  wake_up_writers(tty);
++}
++
++/**
++ * Measures how long one iteration of the polling loop takes.
++ */
++static void measure_sample_cost(void)
++{
++  u64 started;
++  int i;
++
++  started = ktime_get_ns();
++  for (i = 0; i < CALIBRATION_LOOPS; i++)
++  {
++    calibration_sink += (int) ktime_get_ns();
++  }
++  clock_cost_ns = div_u64(ktime_get_ns() - started, CALIBRATION_LOOPS);
++
++  started = ktime_get_ns();
++  for (i = 0; i < CALIBRATION_LOOPS; i++)
++  {
++    calibration_sink += gpiod_get_raw_value(desc_rx);
++    calibration_sink += (int) ktime_get_ns();
++  }
++  sample_cost_ns = div_u64(ktime_get_ns() - started, CALIBRATION_LOOPS);
++
++  gpio_cost_ns = sample_cost_ns > clock_cost_ns
++    ? sample_cost_ns - clock_cost_ns
++    : 0;
++}
++
++/**
++ * Samples the RX line continuously and drives TX on the same grid.
++ */
++static int poll_thread_function(void* data)
++{
++  unsigned long flags;
++  u64 next;
++  u64 last_touch;
++  u64 busy_since = 0;
++
++  if (sample_cost_ns == 0)
++  {
++    measure_sample_cost();
++
++    spin_lock_irqsave(&current_tty_lock, flags);
++    recompute_poll_timing(current_baudrate);
++    spin_unlock_irqrestore(&current_tty_lock, flags);
++
++    printk(KERN_INFO "soft_uart: sample costs %llu ns (gpio %llu ns + clock %llu ns), "
++      "which allows up to %llu bps at %d samples per bit.\n",
++      sample_cost_ns, gpio_cost_ns, clock_cost_ns,
++      div_u64(1000000000ULL, (u32) (poll_headroom * sample_cost_ns * MIN_OVERSAMPLE)),
++      MIN_OVERSAMPLE);
++  }
++
++  reset_poll_state();
++  reset_poll_stats();
++
++  complete(&poll_ready);
++
++  last_touch = ktime_get_ns();
++  next = last_touch + sample_ns;
++
++  while (!kthread_should_stop())
++  {
++    u64 now = wait_until(next);
++    int level = gpiod_get_raw_value(desc_rx);
++
++    poll_rx_step(now, level);
++    poll_tx_step(now);
++
++    next += sample_ns;
++    if ((s64) (next - now) <= 0)
++    {
++      next = now + sample_ns;
++    }
++
++    if (rx_in_frame || tx_in_frame)
++    {
++      if (!poll_stream_open)
++      {
++        poll_stream_open = true;
++        poll_stream_since = now;
++      }
++
++      poll_stream_last = now;
++      disable_poll_irqs();
++    }
++
++    else if (poll_stream_open
++      && (s64) (now - poll_stream_last) < (s64) ((u64) format.frame_bits * bit_ns)
++      && (s64) (now - poll_stream_since) < (s64) POLL_MAX_STREAM_NS)
++    {
++      busy_since = 0;
++      continue;
++    }
++
++    if (!rx_in_frame && !tx_in_frame)
++    {
++      close_poll_stream(now);
++      busy_since = 0;
++
++      flush_rx_buffer();
++
++      if ((s64) (now - last_touch) > NSEC_PER_SEC)
++      {
++        touch_softlockup_watchdog();
++        last_touch = now;
++      }
++
++      cond_resched();
++      next = ktime_get_ns() + sample_ns;
++    }
++    else if (busy_since == 0)
++    {
++      busy_since = now;
++    }
++    else if ((s64) (now - busy_since) > (s64) POLL_MAX_BUSY_NS)
++    {
++      close_poll_stream(now);
++      flush_rx_buffer();
++      touch_softlockup_watchdog();
++      cond_resched();
++      reset_poll_state();
++      busy_since = 0;
++      last_touch = ktime_get_ns();
++      next = last_touch + sample_ns;
++    }
++  }
++
++  close_poll_stream(ktime_get_ns());
++  flush_rx_buffer();
++  gpiod_set_raw_value(desc_tx, 1);
++  log_poll_stats();
++
++  return 0;
++}
++
++/**
++ * Starts the polling thread on the dedicated CPU.
++ * @return true if the thread is running.
++ */
++static bool start_poll_thread(void)
++{
++  struct task_struct* thread;
++
++  thread = kthread_create(poll_thread_function, NULL, "soft_uart_poll");
++
++  if (IS_ERR(thread))
++  {
++    printk(KERN_ALERT "soft_uart: Failed to create the polling thread.\n");
++    return false;
++  }
++
++  init_completion(&poll_ready);
++  kthread_bind(thread, poll_cpu);
++
++  if (poll_rt)
++  {
++    sched_set_fifo(thread);
++  }
++
++  poll_thread = thread;
++  wake_up_process(thread);
++
++  if (!wait_for_completion_timeout(&poll_ready, msecs_to_jiffies(5000)))
++  {
++    printk(KERN_ALERT "soft_uart: The polling thread did not start on CPU %d.\n",
++      poll_cpu);
++    stop_poll_thread();
++    return false;
++  }
++
++  return true;
++}
++
++/**
++ * Stops the polling thread.
++ */
++static void stop_poll_thread(void)
++{
++  if (poll_thread != NULL)
++  {
++    kthread_stop(poll_thread);
++    poll_thread = NULL;
++  }
+ }
+diff --git a/raspberry_soft_uart.h b/raspberry_soft_uart.h
+index 9297bdf..5770d21 100755
+--- a/raspberry_soft_uart.h
++++ b/raspberry_soft_uart.h
+@@ -3,13 +3,21 @@
+ 
+ #include <linux/tty.h>
+ 
++#define SOFT_UART_PARITY_NONE  0
++#define SOFT_UART_PARITY_EVEN  1
++#define SOFT_UART_PARITY_ODD   2
++#define SOFT_UART_PARITY_MARK  3
++#define SOFT_UART_PARITY_SPACE 4
++
+ int raspberry_soft_uart_init(const int gpio_tx, const int gpio_rx);
+ int raspberry_soft_uart_finalize(void);
+ int raspberry_soft_uart_open(struct tty_struct* tty);
+ int raspberry_soft_uart_close(void);
+ int raspberry_soft_uart_set_baudrate(const int baudrate);
++int raspberry_soft_uart_set_frame_format(const int data_bits, const int parity, const int stop_bits);
+ int raspberry_soft_uart_send_string(const unsigned char* string, int string_size);
+ int raspberry_soft_uart_get_tx_queue_room(void);
+ int raspberry_soft_uart_get_tx_queue_size(void);
++void raspberry_soft_uart_flush_tx_queue(void);
+ 
+ #endif

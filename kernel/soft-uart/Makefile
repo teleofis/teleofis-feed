@@ -9,13 +9,12 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=soft-uart
-PKG_RELEASE:=1
+PKG_RELEASE:=2026.03.21
 
-PKG_SOURCE_URL:=https://github.com/adrianomarto/soft_uart
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_DATE:=2022-08-16
-PKG_SOURCE_VERSION:=cf9f362f01ea6f3432a61f0822ac09378a9190a8
-PKG_MIRROR_HASH:=c782bfc2db37f3798064cf25f825e9aece1a282c2390b6fffd80ccdd384903bf
+PKG_SOURCE_URL:=https://github.com/adrianomarto/soft_uart.git
+PKG_MIRROR_HASH:=db999824f7879faaacf3cdceaf9ffcd521b22979c028c0f2153da2e6d8105d5f
+PKG_SOURCE_VERSION:=b2ebe9a513d5a94a5dbbde8362cb12642201f87f
 
 include $(INCLUDE_DIR)/package.mk
 
