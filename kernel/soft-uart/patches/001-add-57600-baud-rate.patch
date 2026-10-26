@@ -171,7 +171,7 @@ index eb6c8c5..bcc5a2a 100755
    
    // Configure the baudrate.
 diff --git a/raspberry_soft_uart.c b/raspberry_soft_uart.c
-index 7554d63..9989bb6 100755
+index 7554d63..5a26d3c 100755
 --- a/raspberry_soft_uart.c
 +++ b/raspberry_soft_uart.c
 @@ -2,28 +2,186 @@
@@ -687,7 +687,7 @@ index 7554d63..9989bb6 100755
  }
  
  //-----------------------------------------------------------------------------
-@@ -176,16 +543,201 @@ int raspberry_soft_uart_get_tx_queue_size(void)
+@@ -176,16 +543,199 @@ int raspberry_soft_uart_get_tx_queue_size(void)
  //-----------------------------------------------------------------------------
  
  /**
@@ -849,7 +849,6 @@ index 7554d63..9989bb6 100755
 +  struct frame_format f = format;
 +  unsigned int frame = 0;
 +  unsigned char character;
-+  char flag;
 +  int i;
 +
 +  if (gpiod_get_raw_value(desc_rx))
@@ -872,8 +871,7 @@ index 7554d63..9989bb6 100755
 +    }
 +  }
 +
-+  flag = decode_frame(frame, &f, &character);
-+  receive_character(character, flag);
++  receive_character(character, decode_frame(frame, &f, &character));
 +}
 +
 +/**
@@ -894,7 +892,7 @@ index 7554d63..9989bb6 100755
  }
  
  
-@@ -195,37 +747,72 @@ static irq_handler_t handle_rx_start(unsigned int irq, void* device, struct pt_r
+@@ -195,37 +745,72 @@ static irq_handler_t handle_rx_start(unsigned int irq, void* device, struct pt_r
  static enum hrtimer_restart handle_tx(struct hrtimer* timer)
  {
    ktime_t current_time = ktime_get();
@@ -978,7 +976,7 @@ index 7554d63..9989bb6 100755
    }
    
    // Restarts the TX timer.
-@@ -244,40 +831,45 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
+@@ -244,40 +829,43 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
  static enum hrtimer_restart handle_rx(struct hrtimer* timer)
  {
    ktime_t current_time = ktime_get();
@@ -987,7 +985,6 @@ index 7554d63..9989bb6 100755
 +  static unsigned int frame = 0;
 +  static struct frame_format f;
 +  unsigned char character;
-+  char flag;
 +  int bit_value = gpiod_get_raw_value(desc_rx);
    enum hrtimer_restart result = HRTIMER_NORESTART;
    bool must_restart_timer = false;
@@ -1023,8 +1020,9 @@ index 7554d63..9989bb6 100755
      must_restart_timer = true;
    }
    
-   // Stop bit.
+-  // Stop bit.
 -  else if (rx_bit_index == 8)
++  // First stop bit.
 +  else
    {
 -    receive_character(character);
@@ -1032,13 +1030,12 @@ index 7554d63..9989bb6 100755
 +    {
 +      frame |= 1 << rx_bit_index;
 +    }
-+
-+    flag = decode_frame(frame, &f, &character);
-+    receive_character(character, flag);
++    
++    receive_character(character, decode_frame(frame, &f, &character));
      rx_bit_index = -1;
    }
    
-@@ -295,22 +887,567 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
+@@ -295,22 +883,567 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
   * Adds a given (received) character to the RX buffer, which is managed by the kernel,
   * and then flushes (flip) it.
   * @param character given character
